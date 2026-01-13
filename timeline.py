@@ -171,6 +171,11 @@ class timeline(object):
 		if self.account.currentTimeline == self:
 			main.window.refreshList()
 		sound.play(self.account, "search")
+		# Notify initial load complete
+		if self.initial:
+			self.initial = False
+			if hasattr(self.account, '_on_timeline_initial_load_complete'):
+				self.account._on_timeline_initial_load_complete()
 
 	def play(self):
 		if self.type == "user":
@@ -251,6 +256,11 @@ class timeline(object):
 
 	def load(self, back=False, speech=False, items=[]):
 		if self.hide:
+			# Still notify if this was an initial load that got skipped
+			if self.initial:
+				self.initial = False
+				if hasattr(self.account, '_on_timeline_initial_load_complete'):
+					self.account._on_timeline_initial_load_complete()
 			return False
 		# Prevent concurrent load operations (but allow streaming items to pass through)
 		if items == [] and self._loading:
@@ -291,6 +301,11 @@ class timeline(object):
 						tl = self.func(**self.prev_kwargs)
 			except MastodonError as error:
 				self.app.handle_error(error, self.account.me.acct + "'s " + self.name)
+				# Still notify initial load complete even on error
+				if self.initial:
+					self.initial = False
+					if hasattr(self.account, '_on_timeline_initial_load_complete'):
+						self.account._on_timeline_initial_load_complete()
 				if self.removable:
 					if self.type == "user" and self.data in self.account.prefs.user_timelines:
 						self.account.prefs.user_timelines.remove(self.data)
@@ -412,6 +427,9 @@ class timeline(object):
 					speak.speak(announcement)
 			if self.initial:
 				self.initial = False
+				# Notify account that this timeline's initial load is complete
+				if hasattr(self.account, '_on_timeline_initial_load_complete'):
+					self.account._on_timeline_initial_load_complete()
 		if self.type == "conversations":
 			self.app.save_messages(self.account, self.statuses)
 		if self == self.account.timelines[len(self.account.timelines) - 1] and not self.account.ready:

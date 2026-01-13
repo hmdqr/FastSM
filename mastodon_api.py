@@ -224,8 +224,8 @@ class mastodon(object):
 
 		self.stream_listener = None
 		self.stream = None
-		if self.app.prefs.streaming:
-			self.start_stream()
+		# Don't start streaming yet - wait for initial timeline loads to complete
+		# Streaming will be started by _check_initial_loads_complete()
 
 		self._finish_timeline_init()
 
@@ -328,7 +328,18 @@ class mastodon(object):
 			# Use CallAfter for thread safety
 			wx.CallAfter(main.window.list.SetSelection, 0)
 			wx.CallAfter(main.window.on_list_change, None)
+		# Track pending initial loads - streaming starts after all complete
+		self._pending_initial_loads = len([t for t in self.timelines if t.initial and not t.hide])
+		self._initial_loads_lock = threading.Lock()
 		threading.Thread(target=timeline.timelineThread, args=[self,], daemon=True).start()
+
+	def _on_timeline_initial_load_complete(self):
+		"""Called when a timeline finishes its initial load. Starts streaming when all are done."""
+		with self._initial_loads_lock:
+			self._pending_initial_loads -= 1
+			if self._pending_initial_loads <= 0 and self.app.prefs.streaming:
+				# All timelines loaded, start streaming
+				self.start_stream()
 
 	def start_stream(self):
 		# Bluesky doesn't support streaming

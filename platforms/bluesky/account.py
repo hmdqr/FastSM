@@ -2,7 +2,7 @@
 
 from typing import List, Optional, Any, Dict
 from atproto import Client
-from atproto.exceptions import AtProtocolError
+from atproto.exceptions import AtProtocolError, InvokeTimeoutError
 
 from platforms.base import PlatformAccount
 from models import UniversalStatus, UniversalUser, UniversalNotification, UserCache
@@ -104,7 +104,7 @@ class BlueskyAccount(PlatformAccount):
             self._store_cursor('home', getattr(response, 'cursor', None))
 
             return self._convert_feed_posts(response.feed)
-        except AtProtocolError as e:
+        except (AtProtocolError, InvokeTimeoutError) as e:
             self.app.handle_error(e, "home timeline")
             return []
         except Exception as e:
@@ -155,7 +155,7 @@ class BlueskyAccount(PlatformAccount):
                             pass
 
             return statuses
-        except AtProtocolError as e:
+        except (AtProtocolError, InvokeTimeoutError) as e:
             self.app.handle_error(e, "mentions")
             return []
 
@@ -186,7 +186,7 @@ class BlueskyAccount(PlatformAccount):
                     self.user_cache.add_users_from_notification(universal_notif)
 
             return notifications
-        except AtProtocolError as e:
+        except (AtProtocolError, InvokeTimeoutError) as e:
             self.app.handle_error(e, "notifications")
             return []
 
@@ -214,7 +214,7 @@ class BlueskyAccount(PlatformAccount):
             self._store_cursor('favourites', getattr(response, 'cursor', None))
 
             return self._convert_feed_posts(response.feed)
-        except AtProtocolError as e:
+        except (AtProtocolError, InvokeTimeoutError) as e:
             self.app.handle_error(e, "favourites")
             return []
 
@@ -239,7 +239,7 @@ class BlueskyAccount(PlatformAccount):
             self._store_cursor(cursor_key, getattr(response, 'cursor', None))
 
             return self._convert_feed_posts(response.feed)
-        except AtProtocolError as e:
+        except (AtProtocolError, InvokeTimeoutError) as e:
             self.app.handle_error(e, "user statuses")
             return []
 
@@ -268,7 +268,7 @@ class BlueskyAccount(PlatformAccount):
             self._store_cursor(cursor_key, getattr(response, 'cursor', None))
 
             return self._convert_feed_posts(response.feed)
-        except AtProtocolError as e:
+        except (AtProtocolError, InvokeTimeoutError) as e:
             self.app.handle_error(e, "feed")
             return []
 
@@ -325,7 +325,7 @@ class BlueskyAccount(PlatformAccount):
                 return self.search_feeds("")
 
             return feeds
-        except AtProtocolError as e:
+        except (AtProtocolError, InvokeTimeoutError) as e:
             self.app.handle_error(e, "get saved feeds")
             return []
         except Exception as e:
@@ -353,7 +353,7 @@ class BlueskyAccount(PlatformAccount):
                     'creator': getattr(feed.creator, 'handle', '') if hasattr(feed, 'creator') else ''
                 })
             return feeds
-        except AtProtocolError as e:
+        except (AtProtocolError, InvokeTimeoutError) as e:
             self.app.handle_error(e, "search feeds")
             return []
 
@@ -378,7 +378,7 @@ class BlueskyAccount(PlatformAccount):
             self._store_cursor(cursor_key, getattr(response, 'cursor', None))
 
             return self._convert_posts(response.posts)
-        except AtProtocolError as e:
+        except (AtProtocolError, InvokeTimeoutError) as e:
             self.app.handle_error(e, "search")
             return []
 
@@ -389,7 +389,7 @@ class BlueskyAccount(PlatformAccount):
             if response.posts:
                 return bluesky_post_to_universal(response.posts[0])
             return None
-        except AtProtocolError as e:
+        except (AtProtocolError, InvokeTimeoutError) as e:
             self.app.handle_error(e, "get status")
             return None
 
@@ -424,7 +424,7 @@ class BlueskyAccount(PlatformAccount):
                         descendants.append(status)
 
             return {'ancestors': ancestors, 'descendants': descendants}
-        except AtProtocolError as e:
+        except (AtProtocolError, InvokeTimeoutError) as e:
             self.app.handle_error(e, "thread context")
             return {'ancestors': [], 'descendants': []}
 
@@ -455,7 +455,7 @@ class BlueskyAccount(PlatformAccount):
             if hasattr(response, 'uri'):
                 return self.get_status(response.uri)
             return None
-        except AtProtocolError as e:
+        except (AtProtocolError, InvokeTimeoutError) as e:
             self.app.handle_error(e, "post")
             return None
 
@@ -514,7 +514,7 @@ class BlueskyAccount(PlatformAccount):
             if hasattr(response, 'uri'):
                 return self.get_status(response.uri)
             return None
-        except AtProtocolError as e:
+        except (AtProtocolError, InvokeTimeoutError) as e:
             self.app.handle_error(e, "quote")
             return None
 
@@ -528,7 +528,7 @@ class BlueskyAccount(PlatformAccount):
                 self.client.repost(uri=status_id, cid=cid)
                 return True
             return False
-        except AtProtocolError as e:
+        except (AtProtocolError, InvokeTimeoutError) as e:
             self.app.handle_error(e, "repost")
             return False
 
@@ -539,7 +539,7 @@ class BlueskyAccount(PlatformAccount):
             # This requires knowing the repost URI
             self.client.unrepost(status_id)
             return True
-        except AtProtocolError as e:
+        except (AtProtocolError, InvokeTimeoutError) as e:
             self.app.handle_error(e, "unrepost")
             return False
 
@@ -552,7 +552,7 @@ class BlueskyAccount(PlatformAccount):
                 self.client.like(uri=status_id, cid=cid)
                 return True
             return False
-        except AtProtocolError as e:
+        except (AtProtocolError, InvokeTimeoutError) as e:
             self.app.handle_error(e, "like")
             return False
 
@@ -561,7 +561,7 @@ class BlueskyAccount(PlatformAccount):
         try:
             self.client.unlike(status_id)
             return True
-        except AtProtocolError as e:
+        except (AtProtocolError, InvokeTimeoutError) as e:
             self.app.handle_error(e, "unlike")
             return False
 
@@ -570,7 +570,7 @@ class BlueskyAccount(PlatformAccount):
         try:
             self.client.delete_post(status_id)
             return True
-        except AtProtocolError as e:
+        except (AtProtocolError, InvokeTimeoutError) as e:
             self.app.handle_error(e, "delete")
             return False
 
@@ -584,7 +584,7 @@ class BlueskyAccount(PlatformAccount):
             if user:
                 self.user_cache.add_user(user)
             return user
-        except AtProtocolError as e:
+        except (AtProtocolError, InvokeTimeoutError) as e:
             self.app.handle_error(e, "get user")
             return None
 
@@ -598,7 +598,7 @@ class BlueskyAccount(PlatformAccount):
             )
             response = self.client.app.bsky.actor.search_actors(params)
             return self._convert_profiles(response.actors)
-        except AtProtocolError as e:
+        except (AtProtocolError, InvokeTimeoutError) as e:
             self.app.handle_error(e, "search users")
             return []
 
@@ -611,7 +611,7 @@ class BlueskyAccount(PlatformAccount):
         try:
             self.client.follow(user_id)
             return True
-        except AtProtocolError as e:
+        except (AtProtocolError, InvokeTimeoutError) as e:
             self.app.handle_error(e, "follow")
             return False
 
@@ -620,7 +620,7 @@ class BlueskyAccount(PlatformAccount):
         try:
             self.client.unfollow(user_id)
             return True
-        except AtProtocolError as e:
+        except (AtProtocolError, InvokeTimeoutError) as e:
             self.app.handle_error(e, "unfollow")
             return False
 
@@ -629,7 +629,7 @@ class BlueskyAccount(PlatformAccount):
         try:
             self.client.app.bsky.graph.block.create(self._me.id, {'subject': user_id})
             return True
-        except AtProtocolError as e:
+        except (AtProtocolError, InvokeTimeoutError) as e:
             self.app.handle_error(e, "block")
             return False
 
@@ -639,7 +639,7 @@ class BlueskyAccount(PlatformAccount):
             # Need to find and delete the block record
             # This is more complex in AT Protocol
             return False
-        except AtProtocolError as e:
+        except (AtProtocolError, InvokeTimeoutError) as e:
             self.app.handle_error(e, "unblock")
             return False
 
@@ -648,7 +648,7 @@ class BlueskyAccount(PlatformAccount):
         try:
             self.client.mute(user_id)
             return True
-        except AtProtocolError as e:
+        except (AtProtocolError, InvokeTimeoutError) as e:
             self.app.handle_error(e, "mute")
             return False
 
@@ -657,7 +657,7 @@ class BlueskyAccount(PlatformAccount):
         try:
             self.client.unmute(user_id)
             return True
-        except AtProtocolError as e:
+        except (AtProtocolError, InvokeTimeoutError) as e:
             self.app.handle_error(e, "unmute")
             return False
 
@@ -670,7 +670,7 @@ class BlueskyAccount(PlatformAccount):
 
             response = self.client.get_followers(**params)
             return self._convert_profiles(response.followers)
-        except AtProtocolError as e:
+        except (AtProtocolError, InvokeTimeoutError) as e:
             self.app.handle_error(e, "followers")
             return []
 
@@ -683,6 +683,6 @@ class BlueskyAccount(PlatformAccount):
 
             response = self.client.get_follows(**params)
             return self._convert_profiles(response.follows)
-        except AtProtocolError as e:
+        except (AtProtocolError, InvokeTimeoutError) as e:
             self.app.handle_error(e, "following")
             return []

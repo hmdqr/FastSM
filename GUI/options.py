@@ -1,0 +1,197 @@
+import timeline
+import platform
+import os, sys
+import wx
+from . import main
+from application import get_app
+
+class general(wx.Panel, wx.Dialog):
+	def __init__(self, parent):
+		super(general, self).__init__(parent)
+		self.main_box = wx.BoxSizer(wx.VERTICAL)
+		self.ask_dismiss=wx.CheckBox(self, -1, "Ask before dismissing timelines")
+		self.main_box.Add(self.ask_dismiss, 0, wx.ALL, 10)
+		self.ask_dismiss.SetValue(get_app().prefs.ask_dismiss)
+		self.earcon_audio=wx.CheckBox(self, -1, "Play a sound when a post contains media")
+		self.main_box.Add(self.earcon_audio, 0, wx.ALL, 10)
+		self.earcon_audio.SetValue(get_app().prefs.earcon_audio)
+		self.earcon_top=wx.CheckBox(self, -1, "Play a sound when you navigate to a timeline that may have new items")
+		self.main_box.Add(self.earcon_top, 0, wx.ALL, 10)
+		self.earcon_top.SetValue(get_app().prefs.earcon_top)
+		self.demojify=wx.CheckBox(self, -1, "Remove emojis and other unicode characters from display names")
+		self.main_box.Add(self.demojify, 0, wx.ALL, 10)
+		self.demojify.SetValue(get_app().prefs.demojify)
+		self.demojify_post=wx.CheckBox(self, -1, "Remove emojis and other unicode characters from post text")
+		self.main_box.Add(self.demojify_post, 0, wx.ALL, 10)
+		self.demojify_post.SetValue(get_app().prefs.demojify_post)
+		self.reversed=wx.CheckBox(self, -1, "Reverse timelines (newest on bottom)")
+		self.main_box.Add(self.reversed, 0, wx.ALL, 10)
+		self.reversed.SetValue(get_app().prefs.reversed)
+		self.wrap=wx.CheckBox(self, -1, "Word wrap in text fields")
+		self.main_box.Add(self.wrap, 0, wx.ALL, 10)
+		self.wrap.SetValue(get_app().prefs.wrap)
+		self.errors=wx.CheckBox(self, -1, "Play sound and speak message for errors")
+		self.main_box.Add(self.errors, 0, wx.ALL, 10)
+		self.errors.SetValue(get_app().prefs.errors)
+		self.autoOpenSingleURL=wx.CheckBox(self, -1, "When getting URLs from a post, automatically open the first URL if it is the only one")
+		self.main_box.Add(self.autoOpenSingleURL, 0, wx.ALL, 10)
+		self.autoOpenSingleURL.SetValue(get_app().prefs.autoOpenSingleURL)
+		self.use24HourTime=wx.CheckBox(self, -1, "Use 24-hour time for post timestamps")
+		self.main_box.Add(self.use24HourTime, 0, wx.ALL, 10)
+		self.use24HourTime.SetValue(get_app().prefs.use24HourTime)
+
+
+class templates(wx.Panel, wx.Dialog):
+	def __init__(self, parent):
+		super(templates, self).__init__(parent)
+		self.main_box = wx.BoxSizer(wx.VERTICAL)
+		self.postTemplate_label = wx.StaticText(self, -1, "Post template")
+		self.postTemplate = wx.TextCtrl(self, -1, "")
+		self.main_box.Add(self.postTemplate, 0, wx.ALL, 10)
+		self.postTemplate.AppendText(get_app().prefs.postTemplate)
+		self.quoteTemplate_label = wx.StaticText(self, -1, "Quote template")
+		self.quoteTemplate = wx.TextCtrl(self, -1, "")
+		self.main_box.Add(self.quoteTemplate, 0, wx.ALL, 10)
+		self.quoteTemplate.AppendText(get_app().prefs.quoteTemplate)
+		self.boostTemplate_label = wx.StaticText(self, -1, "Boost template")
+		self.boostTemplate = wx.TextCtrl(self, -1, "")
+		self.main_box.Add(self.boostTemplate, 0, wx.ALL, 10)
+		self.boostTemplate.AppendText(get_app().prefs.boostTemplate)
+		self.copyTemplate_label = wx.StaticText(self, -1, "Copy template")
+		self.copyTemplate = wx.TextCtrl(self, -1, "")
+		self.main_box.Add(self.copyTemplate, 0, wx.ALL, 10)
+		self.copyTemplate.AppendText(get_app().prefs.copyTemplate)
+		self.messageTemplate_label = wx.StaticText(self, -1, "Direct Message template")
+		self.messageTemplate = wx.TextCtrl(self, -1, "")
+		self.main_box.Add(self.messageTemplate, 0, wx.ALL, 10)
+		self.messageTemplate.AppendText(get_app().prefs.messageTemplate)
+		self.userTemplate_label = wx.StaticText(self, -1, "User template")
+		self.userTemplate = wx.TextCtrl(self, -1, "")
+		self.main_box.Add(self.userTemplate, 0, wx.ALL, 10)
+		self.userTemplate.AppendText(get_app().prefs.userTemplate)
+		self.notificationTemplate_label = wx.StaticText(self, -1, "Notification template")
+		self.notificationTemplate = wx.TextCtrl(self, -1, "")
+		self.main_box.Add(self.notificationTemplate, 0, wx.ALL, 10)
+		self.notificationTemplate.AppendText(get_app().prefs.notificationTemplate)
+
+class advanced(wx.Panel, wx.Dialog):
+	def __init__(self, parent):
+		super(advanced, self).__init__(parent)
+		self.main_box = wx.BoxSizer(wx.VERTICAL)
+		if platform.system()!="Darwin":
+			self.invisible=wx.CheckBox(self, -1, "Enable invisible interface")
+			self.main_box.Add(self.invisible, 0, wx.ALL, 10)
+			self.invisible.SetValue(get_app().prefs.invisible)
+			self.invisible_sync=wx.CheckBox(self, -1, "Sync invisible interface with UI (uncheck for reduced lag in invisible interface)")
+			self.main_box.Add(self.invisible_sync, 0, wx.ALL, 10)
+			self.invisible_sync.SetValue(get_app().prefs.invisible_sync)
+			self.repeat=wx.CheckBox(self, -1, "Repeat items at edges of invisible interface")
+			self.main_box.Add(self.repeat, 0, wx.ALL, 10)
+			self.repeat.SetValue(get_app().prefs.repeat)
+		self.position=wx.CheckBox(self, -1, "Speak position information when navigating between timelines of invisible interface and switching timelines")
+		self.main_box.Add(self.position, 0, wx.ALL, 10)
+		self.position.SetValue(get_app().prefs.position)
+		self.update_time_label = wx.StaticText(self, -1, "Update time, in minutes")
+		self.update_time = wx.TextCtrl(self, -1, "")
+		self.main_box.Add(self.update_time, 0, wx.ALL, 10)
+		self.update_time.AppendText(str(get_app().prefs.update_time))
+		self.user_limit_label = wx.StaticText(self, -1, "Max API calls when fetching users in user viewer")
+		self.user_limit = wx.TextCtrl(self, -1, "")
+		self.main_box.Add(self.user_limit, 0, wx.ALL, 10)
+		self.user_limit.AppendText(str(get_app().prefs.user_limit))
+		self.count_label = wx.StaticText(self, -1, "Number of posts to fetch per call (Maximum is 40)")
+		self.count = wx.TextCtrl(self, -1, "")
+		self.main_box.Add(self.count, 0, wx.ALL, 10)
+		self.count.AppendText(str(get_app().prefs.count))
+		self.fetch_pages_label = wx.StaticText(self, -1, "Number of API calls to make when loading timelines (1-10)")
+		self.fetch_pages = wx.TextCtrl(self, -1, "")
+		self.main_box.Add(self.fetch_pages, 0, wx.ALL, 10)
+		self.fetch_pages.AppendText(str(get_app().prefs.fetch_pages))
+		self.streaming=wx.CheckBox(self, -1, "Enable streaming for home and notifications (Requires restart to disable)")
+		self.main_box.Add(self.streaming, 0, wx.ALL, 10)
+		self.streaming.SetValue(get_app().prefs.streaming)
+
+class OptionsGui(wx.Dialog):
+	def __init__(self):
+		wx.Dialog.__init__(self, None, title="Options", size=(350,200))
+		self.Bind(wx.EVT_CLOSE, self.OnClose)
+		self.panel = wx.Panel(self)
+		self.main_box = wx.BoxSizer(wx.VERTICAL)
+		self.notebook = wx.Notebook(self.panel)
+		self.general=general(self.notebook)
+		self.notebook.AddPage(self.general, "General")
+		self.general.SetFocus()
+		self.templates=templates(self.notebook)
+		self.notebook.AddPage(self.templates, "Templates")
+		self.advanced=advanced(self.notebook)
+		self.notebook.AddPage(self.advanced, "Advanced")
+		self.main_box.Add(self.notebook, 0, wx.ALL, 10)
+		self.ok = wx.Button(self.panel, wx.ID_OK, "&OK")
+		self.ok.SetDefault()
+		self.ok.Bind(wx.EVT_BUTTON, self.OnOK)
+		self.main_box.Add(self.ok, 0, wx.ALL, 10)
+		self.close = wx.Button(self.panel, wx.ID_CANCEL, "&Cancel")
+		self.close.Bind(wx.EVT_BUTTON, self.OnClose)
+		self.main_box.Add(self.close, 0, wx.ALL, 10)
+		self.panel.Layout()
+
+	def OnOK(self, event):
+		refresh=False
+		get_app().prefs.use24HourTime = self.general.use24HourTime.GetValue()
+		get_app().prefs.ask_dismiss=self.general.ask_dismiss.GetValue()
+		if platform.system()!="Darwin":
+			get_app().prefs.invisible=self.advanced.invisible.GetValue()
+			get_app().prefs.invisible_sync=self.advanced.invisible_sync.GetValue()
+			get_app().prefs.repeat=self.advanced.repeat.GetValue()
+			get_app().prefs.invisible_sync=self.advanced.invisible_sync.GetValue()
+			if get_app().prefs.invisible and not main.window.invisible:
+				main.window.register_keys()
+			if not get_app().prefs.invisible and main.window.invisible:
+				main.window.unregister_keys()
+		get_app().prefs.streaming=self.advanced.streaming.GetValue()
+		get_app().prefs.position=self.advanced.position.GetValue()
+		get_app().prefs.earcon_audio=self.general.earcon_audio.GetValue()
+		get_app().prefs.earcon_top=self.general.earcon_top.GetValue()
+		get_app().prefs.wrap=self.general.wrap.GetValue()
+		get_app().prefs.update_time=int(self.advanced.update_time.GetValue())
+		if get_app().prefs.update_time<1:
+			get_app().prefs.update_time=1
+		get_app().prefs.user_limit=int(self.advanced.user_limit.GetValue())
+		if get_app().prefs.user_limit<1:
+			get_app().prefs.user_limit=1
+		if get_app().prefs.user_limit>15:
+			get_app().prefs.user_limit=15
+		get_app().prefs.count=int(self.advanced.count.GetValue())
+		if get_app().prefs.count>40:
+			get_app().prefs.count=40
+		get_app().prefs.fetch_pages=int(self.advanced.fetch_pages.GetValue())
+		if get_app().prefs.fetch_pages<1:
+			get_app().prefs.fetch_pages=1
+		if get_app().prefs.fetch_pages>10:
+			get_app().prefs.fetch_pages=10
+		if get_app().prefs.reversed!=self.general.reversed.GetValue():
+			reverse=True
+		else:
+			reverse=False
+		get_app().prefs.reversed=self.general.reversed.GetValue()
+		if get_app().prefs.demojify_post!=self.general.demojify_post.GetValue() or get_app().prefs.demojify!=self.general.demojify.GetValue() or get_app().prefs.postTemplate!=self.templates.postTemplate.GetValue() or get_app().prefs.boostTemplate!=self.templates.boostTemplate.GetValue or get_app().prefs.quoteTemplate!=self.templates.quoteTemplate.GetValue or get_app().prefs.messageTemplate!=self.templates.messageTemplate.GetValue():
+			refresh=True
+		get_app().prefs.demojify=self.general.demojify.GetValue()
+		get_app().prefs.demojify_post=self.general.demojify_post.GetValue()
+		get_app().prefs.errors=self.general.errors.GetValue()
+		get_app().prefs.postTemplate=self.templates.postTemplate.GetValue()
+		get_app().prefs.quoteTemplate=self.templates.quoteTemplate.GetValue()
+		get_app().prefs.boostTemplate=self.templates.boostTemplate.GetValue()
+		get_app().prefs.messageTemplate=self.templates.messageTemplate.GetValue()
+		get_app().prefs.copyTemplate=self.templates.copyTemplate.GetValue()
+		get_app().prefs.userTemplate=self.templates.userTemplate.GetValue()
+		get_app().prefs.notificationTemplate=self.templates.notificationTemplate.GetValue()
+		get_app().prefs.autoOpenSingleURL=self.general.autoOpenSingleURL.GetValue()
+		self.Destroy()
+		if reverse:
+			timeline.reverse()
+		if refresh:
+			main.window.refreshList()
+
+	def OnClose(self, event):
+		self.Destroy()

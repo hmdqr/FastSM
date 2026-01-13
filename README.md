@@ -1,0 +1,2 @@
+# FastSM
+FastSM is a (currently) Mastodon/Bluesky client which is based off of the code for the [Quinter](https://github.com/QuinterApp/Quinter) twitter app that I wrote alongside [Quin](https://github.com/trypsynth) in 2021. Note that although this is based off of that code, it is heavily modified and modernized. My hope here is to create a Mastodon/Bluesky app with a similar feel to the Quinter client.

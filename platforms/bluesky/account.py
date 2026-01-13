@@ -1,0 +1,688 @@
+"""Bluesky platform account implementation."""
+
+from typing import List, Optional, Any, Dict
+from atproto import Client
+from atproto.exceptions import AtProtocolError
+
+from platforms.base import PlatformAccount
+from models import UniversalStatus, UniversalUser, UniversalNotification, UserCache
+from .models import (
+    bluesky_post_to_universal,
+    bluesky_profile_to_universal,
+    bluesky_notification_to_universal,
+    extract_rkey_from_uri,
+)
+
+
+class BlueskyAccount(PlatformAccount):
+    """Bluesky-specific account implementation."""
+
+    platform_name = "bluesky"
+
+    # Feature flags - Bluesky has different capabilities than Mastodon
+    supports_visibility = False  # All posts are public
+    supports_content_warning = False  # Uses labels instead of CW
+    supports_quote_posts = True
+    supports_polls = False
+    supports_lists = False  # Bluesky has feeds but not traditional lists
+    supports_direct_messages = False  # No DM API
+
+    def __init__(self, app, index: int, client: Client, profile, confpath: str):
+        super().__init__(app, index)
+        self.client = client
+        self._me = bluesky_profile_to_universal(profile)
+        self._raw_me = profile
+        self.confpath = confpath
+        self._max_chars = 300  # Bluesky character limit
+
+        # Initialize user cache
+        self.user_cache = UserCache(confpath, 'bluesky', str(self._me.id))
+        self.user_cache.load()
+
+        # Cursor tracking for pagination (Bluesky uses cursors, not max_id)
+        self._cursors = {}  # timeline_type -> cursor
+
+    @property
+    def me(self) -> UniversalUser:
+        return self._me
+
+    def _store_cursor(self, timeline_type: str, cursor: str):
+        """Store cursor for pagination."""
+        if cursor:
+            self._cursors[timeline_type] = cursor
+
+    def _get_cursor(self, timeline_type: str) -> str:
+        """Get stored cursor for pagination."""
+        return self._cursors.get(timeline_type)
+
+    def _convert_feed_posts(self, feed) -> List[UniversalStatus]:
+        """Convert a list of feed view posts to universal statuses."""
+        statuses = []
+        for item in feed:
+            post = bluesky_post_to_universal(item)
+            if post:
+                statuses.append(post)
+                self.user_cache.add_users_from_status(post)
+        return statuses
+
+    def _convert_posts(self, posts) -> List[UniversalStatus]:
+        """Convert a list of post views to universal statuses."""
+        statuses = []
+        for post in posts:
+            status = bluesky_post_to_universal(post)
+            if status:
+                statuses.append(status)
+                self.user_cache.add_users_from_status(status)
+        return statuses
+
+    def _convert_profiles(self, profiles) -> List[UniversalUser]:
+        """Convert a list of profiles to universal users."""
+        users = []
+        for profile in profiles:
+            user = bluesky_profile_to_universal(profile)
+            if user:
+                users.append(user)
+                self.user_cache.add_user(user)
+        return users
+
+    # ============ Timeline Methods ============
+
+    def get_home_timeline(self, limit: int = 40, cursor: str = None, max_id: str = None, **kwargs) -> List[UniversalStatus]:
+        """Get home timeline (Following feed)."""
+        try:
+            params = {'limit': min(limit, 100)}  # Bluesky max is 100
+
+            # For "load previous", use the stored cursor (max_id signals pagination request)
+            if max_id and not cursor:
+                cursor = self._get_cursor('home')
+            if cursor:
+                params['cursor'] = cursor
+
+            response = self.client.get_timeline(**params)
+
+            # Store cursor for next pagination request
+            self._store_cursor('home', getattr(response, 'cursor', None))
+
+            return self._convert_feed_posts(response.feed)
+        except AtProtocolError as e:
+            self.app.handle_error(e, "home timeline")
+            return []
+        except Exception as e:
+            # Handle Pydantic validation errors and other unexpected errors
+            error_msg = str(e)
+            if 'validation error' in error_msg.lower():
+                self.app.handle_error(f"API response parsing error (try refreshing): {error_msg[:100]}", "home timeline")
+            else:
+                self.app.handle_error(e, "home timeline")
+            return []
+
+    def get_mentions(self, limit: int = 40, cursor: str = None, max_id: str = None, **kwargs) -> List[UniversalStatus]:
+        """Get mentions as statuses (extracted from notifications)."""
+        try:
+            from atproto import models
+
+            # For "load previous", use the stored cursor
+            if max_id and not cursor:
+                cursor = self._get_cursor('mentions')
+
+            params = models.AppBskyNotificationListNotifications.Params(
+                limit=min(limit, 100),
+                cursor=cursor
+            )
+            response = self.client.app.bsky.notification.list_notifications(params)
+
+            # Store cursor for next pagination request
+            self._store_cursor('mentions', getattr(response, 'cursor', None))
+
+            statuses = []
+
+            for notif in response.notifications:
+                reason = getattr(notif, 'reason', '')
+                if reason in ('mention', 'reply', 'quote'):
+                    # Get the post URI from the notification
+                    uri = getattr(notif, 'uri', '')
+                    if uri:
+                        try:
+                            # Fetch the actual post
+                            post_response = self.client.get_posts([uri])
+                            if post_response.posts:
+                                status = bluesky_post_to_universal(post_response.posts[0])
+                                if status:
+                                    status._notification_id = uri
+                                    statuses.append(status)
+                                    self.user_cache.add_users_from_status(status)
+                        except:
+                            pass
+
+            return statuses
+        except AtProtocolError as e:
+            self.app.handle_error(e, "mentions")
+            return []
+
+    def get_notifications(self, limit: int = 40, cursor: str = None, max_id: str = None, **kwargs) -> List[UniversalNotification]:
+        """Get notifications."""
+        try:
+            from atproto import models
+
+            # For "load previous", use the stored cursor
+            if max_id and not cursor:
+                cursor = self._get_cursor('notifications')
+
+            params = models.AppBskyNotificationListNotifications.Params(
+                limit=min(limit, 100),
+                cursor=cursor
+            )
+            response = self.client.app.bsky.notification.list_notifications(params)
+
+            # Store cursor for next pagination request
+            self._store_cursor('notifications', getattr(response, 'cursor', None))
+
+            notifications = []
+
+            for notif in response.notifications:
+                universal_notif = bluesky_notification_to_universal(notif)
+                if universal_notif:
+                    notifications.append(universal_notif)
+                    self.user_cache.add_users_from_notification(universal_notif)
+
+            return notifications
+        except AtProtocolError as e:
+            self.app.handle_error(e, "notifications")
+            return []
+
+    def get_conversations(self, limit: int = 40, **kwargs) -> List[Any]:
+        """Get direct message conversations - NOT SUPPORTED on Bluesky."""
+        return []
+
+    def get_favourites(self, limit: int = 40, cursor: str = None, max_id: str = None, **kwargs) -> List[UniversalStatus]:
+        """Get liked posts."""
+        try:
+            from atproto import models
+
+            # For "load previous", use the stored cursor
+            if max_id and not cursor:
+                cursor = self._get_cursor('favourites')
+
+            params = models.AppBskyFeedGetActorLikes.Params(
+                actor=self._me.id,
+                limit=min(limit, 100),
+                cursor=cursor
+            )
+            response = self.client.app.bsky.feed.get_actor_likes(params)
+
+            # Store cursor for next pagination request
+            self._store_cursor('favourites', getattr(response, 'cursor', None))
+
+            return self._convert_feed_posts(response.feed)
+        except AtProtocolError as e:
+            self.app.handle_error(e, "favourites")
+            return []
+
+    def get_user_statuses(self, user_id: str, limit: int = 40, cursor: str = None, max_id: str = None, **kwargs) -> List[UniversalStatus]:
+        """Get statuses from a specific user."""
+        try:
+            # For "load previous", use the stored cursor (keyed by user_id)
+            cursor_key = f'user_{user_id}'
+            if max_id and not cursor:
+                cursor = self._get_cursor(cursor_key)
+
+            params = {
+                'actor': user_id,
+                'limit': min(limit, 100)
+            }
+            if cursor:
+                params['cursor'] = cursor
+
+            response = self.client.get_author_feed(**params)
+
+            # Store cursor for next pagination request
+            self._store_cursor(cursor_key, getattr(response, 'cursor', None))
+
+            return self._convert_feed_posts(response.feed)
+        except AtProtocolError as e:
+            self.app.handle_error(e, "user statuses")
+            return []
+
+    def get_list_timeline(self, list_id: str, limit: int = 40, **kwargs) -> List[UniversalStatus]:
+        """Get statuses from a list - NOT SUPPORTED on Bluesky."""
+        return []
+
+    def get_feed_timeline(self, feed_uri: str, limit: int = 40, cursor: str = None, max_id: str = None, **kwargs) -> List[UniversalStatus]:
+        """Get posts from a custom feed."""
+        try:
+            from atproto import models
+
+            # For "load previous", use the stored cursor (keyed by feed)
+            cursor_key = f'feed_{feed_uri}'
+            if max_id and not cursor:
+                cursor = self._get_cursor(cursor_key)
+
+            params = models.AppBskyFeedGetFeed.Params(
+                feed=feed_uri,
+                limit=min(limit, 100),
+                cursor=cursor
+            )
+            response = self.client.app.bsky.feed.get_feed(params)
+
+            # Store cursor for next pagination request
+            self._store_cursor(cursor_key, getattr(response, 'cursor', None))
+
+            return self._convert_feed_posts(response.feed)
+        except AtProtocolError as e:
+            self.app.handle_error(e, "feed")
+            return []
+
+    def get_saved_feeds(self) -> List[dict]:
+        """Get user's saved/pinned feeds."""
+        try:
+            from atproto import models
+
+            # Try to get preferences - may fail due to unknown preference types
+            try:
+                response = self.client.app.bsky.actor.get_preferences()
+                preferences = response.preferences
+            except Exception:
+                # If preferences fail, fall back to searching popular feeds
+                return self.search_feeds("")
+
+            feeds = []
+            for pref in preferences:
+                # Check for savedFeedsPref or savedFeedsPrefV2
+                pref_type = getattr(pref, 'py_type', '') or getattr(pref, '$type', '')
+                if 'savedFeedsPref' in str(pref_type) or hasattr(pref, 'saved') or hasattr(pref, 'items'):
+                    # savedFeedsPrefV2 uses 'items', savedFeedsPref uses 'saved'/'pinned'
+                    saved = getattr(pref, 'saved', None) or []
+                    pinned = getattr(pref, 'pinned', None) or []
+                    items = getattr(pref, 'items', None) or []
+
+                    # V2 format has items with 'value' (feed URI) and 'type'
+                    feed_uris = []
+                    if items:
+                        for item in items:
+                            if hasattr(item, 'value'):
+                                feed_uris.append(item.value)
+                            elif isinstance(item, dict) and 'value' in item:
+                                feed_uris.append(item['value'])
+                    else:
+                        feed_uris = list(set(saved + pinned))
+
+                    if feed_uris:
+                        try:
+                            feed_params = models.AppBskyFeedGetFeedGenerators.Params(feeds=feed_uris[:25])
+                            feed_response = self.client.app.bsky.feed.get_feed_generators(feed_params)
+                            for feed in feed_response.feeds:
+                                feeds.append({
+                                    'id': feed.uri,
+                                    'name': feed.display_name,
+                                    'description': getattr(feed, 'description', ''),
+                                    'creator': getattr(feed.creator, 'handle', '') if hasattr(feed, 'creator') else ''
+                                })
+                        except:
+                            pass
+
+            # If no feeds found from preferences, return popular feeds
+            if not feeds:
+                return self.search_feeds("")
+
+            return feeds
+        except AtProtocolError as e:
+            self.app.handle_error(e, "get saved feeds")
+            return []
+        except Exception as e:
+            # Handle Pydantic validation errors and other issues
+            # Fall back to popular feeds
+            return self.search_feeds("")
+
+    def search_feeds(self, query: str, limit: int = 25) -> List[dict]:
+        """Search for feeds."""
+        try:
+            from atproto import models
+            # Use popular feeds endpoint or search
+            params = models.AppBskyUnspeccedGetPopularFeedGenerators.Params(
+                limit=min(limit, 100),
+                query=query if query else None
+            )
+            response = self.client.app.bsky.unspecced.get_popular_feed_generators(params)
+
+            feeds = []
+            for feed in response.feeds:
+                feeds.append({
+                    'id': feed.uri,
+                    'name': feed.display_name,
+                    'description': getattr(feed, 'description', ''),
+                    'creator': getattr(feed.creator, 'handle', '') if hasattr(feed, 'creator') else ''
+                })
+            return feeds
+        except AtProtocolError as e:
+            self.app.handle_error(e, "search feeds")
+            return []
+
+    def search_statuses(self, query: str, limit: int = 40, cursor: str = None, max_id: str = None, **kwargs) -> List[UniversalStatus]:
+        """Search for statuses."""
+        try:
+            from atproto import models
+
+            # For "load previous", use the stored cursor (keyed by query)
+            cursor_key = f'search_{query}'
+            if max_id and not cursor:
+                cursor = self._get_cursor(cursor_key)
+
+            params = models.AppBskyFeedSearchPosts.Params(
+                q=query,
+                limit=min(limit, 100),
+                cursor=cursor
+            )
+            response = self.client.app.bsky.feed.search_posts(params)
+
+            # Store cursor for next pagination request
+            self._store_cursor(cursor_key, getattr(response, 'cursor', None))
+
+            return self._convert_posts(response.posts)
+        except AtProtocolError as e:
+            self.app.handle_error(e, "search")
+            return []
+
+    def get_status(self, status_id: str) -> Optional[UniversalStatus]:
+        """Get a single status by URI."""
+        try:
+            response = self.client.get_posts([status_id])
+            if response.posts:
+                return bluesky_post_to_universal(response.posts[0])
+            return None
+        except AtProtocolError as e:
+            self.app.handle_error(e, "get status")
+            return None
+
+    def get_status_context(self, status_id: str) -> Dict[str, List[UniversalStatus]]:
+        """Get thread context (replies and ancestors)."""
+        try:
+            response = self.client.get_post_thread(uri=status_id)
+
+            ancestors = []
+            descendants = []
+
+            # Parse thread structure
+            thread = response.thread
+
+            # Get parent chain (ancestors)
+            parent = getattr(thread, 'parent', None)
+            while parent:
+                post = getattr(parent, 'post', None)
+                if post:
+                    status = bluesky_post_to_universal(post)
+                    if status:
+                        ancestors.insert(0, status)
+                parent = getattr(parent, 'parent', None)
+
+            # Get replies (descendants)
+            replies = getattr(thread, 'replies', [])
+            for reply in replies:
+                post = getattr(reply, 'post', None)
+                if post:
+                    status = bluesky_post_to_universal(post)
+                    if status:
+                        descendants.append(status)
+
+            return {'ancestors': ancestors, 'descendants': descendants}
+        except AtProtocolError as e:
+            self.app.handle_error(e, "thread context")
+            return {'ancestors': [], 'descendants': []}
+
+    # ============ Action Methods ============
+
+    def post(self, text: str, reply_to_id: Optional[str] = None,
+             visibility: Optional[str] = None, spoiler_text: Optional[str] = None,
+             **kwargs) -> UniversalStatus:
+        """Create a new post."""
+        try:
+            post_kwargs = {'text': text}
+
+            # Handle reply
+            if reply_to_id:
+                # Need to build reply reference with root and parent
+                reply_ref = self._build_reply_ref(reply_to_id)
+                if reply_ref:
+                    post_kwargs['reply_to'] = reply_ref
+
+            # Handle labels (content warning equivalent)
+            labels = kwargs.get('labels', [])
+            if labels:
+                post_kwargs['labels'] = labels
+
+            response = self.client.send_post(**post_kwargs)
+
+            # Fetch the created post to return full data
+            if hasattr(response, 'uri'):
+                return self.get_status(response.uri)
+            return None
+        except AtProtocolError as e:
+            self.app.handle_error(e, "post")
+            return None
+
+    def _build_reply_ref(self, reply_to_uri: str):
+        """Build a reply reference for threading."""
+        try:
+            # Get the parent post to find the thread root
+            parent_thread = self.client.get_post_thread(uri=reply_to_uri)
+            parent_post = getattr(parent_thread.thread, 'post', None)
+
+            if not parent_post:
+                return None
+
+            parent_uri = getattr(parent_post, 'uri', '')
+            parent_cid = getattr(parent_post, 'cid', '')
+
+            # Find the thread root
+            root_uri = parent_uri
+            root_cid = parent_cid
+
+            parent_ref = getattr(parent_thread.thread, 'parent', None)
+            while parent_ref:
+                root_post = getattr(parent_ref, 'post', None)
+                if root_post:
+                    root_uri = getattr(root_post, 'uri', root_uri)
+                    root_cid = getattr(root_post, 'cid', root_cid)
+                parent_ref = getattr(parent_ref, 'parent', None)
+
+            from atproto import models
+            return models.AppBskyFeedPost.ReplyRef(
+                root=models.ComAtprotoRepoStrongRef.Main(uri=root_uri, cid=root_cid),
+                parent=models.ComAtprotoRepoStrongRef.Main(uri=parent_uri, cid=parent_cid),
+            )
+        except Exception as e:
+            print(f"Error building reply ref: {e}")
+            return None
+
+    def quote(self, status, text: str, visibility: Optional[str] = None) -> UniversalStatus:
+        """Quote a post."""
+        try:
+            status_uri = status.id if hasattr(status, 'id') else status
+            status_cid = getattr(status, 'cid', None)
+
+            # If we don't have the CID, fetch the post
+            if not status_cid:
+                post_response = self.client.get_posts([status_uri])
+                if post_response.posts:
+                    status_cid = getattr(post_response.posts[0], 'cid', '')
+
+            from atproto import models
+            embed = models.AppBskyEmbedRecord.Main(
+                record=models.ComAtprotoRepoStrongRef.Main(uri=status_uri, cid=status_cid)
+            )
+
+            response = self.client.send_post(text=text, embed=embed)
+            if hasattr(response, 'uri'):
+                return self.get_status(response.uri)
+            return None
+        except AtProtocolError as e:
+            self.app.handle_error(e, "quote")
+            return None
+
+    def boost(self, status_id: str) -> bool:
+        """Repost a status."""
+        try:
+            # Get the CID for the post
+            post_response = self.client.get_posts([status_id])
+            if post_response.posts:
+                cid = getattr(post_response.posts[0], 'cid', '')
+                self.client.repost(uri=status_id, cid=cid)
+                return True
+            return False
+        except AtProtocolError as e:
+            self.app.handle_error(e, "repost")
+            return False
+
+    def unboost(self, status_id: str) -> bool:
+        """Delete a repost."""
+        try:
+            # Need to find our repost record to delete it
+            # This requires knowing the repost URI
+            self.client.unrepost(status_id)
+            return True
+        except AtProtocolError as e:
+            self.app.handle_error(e, "unrepost")
+            return False
+
+    def favourite(self, status_id: str) -> bool:
+        """Like a status."""
+        try:
+            post_response = self.client.get_posts([status_id])
+            if post_response.posts:
+                cid = getattr(post_response.posts[0], 'cid', '')
+                self.client.like(uri=status_id, cid=cid)
+                return True
+            return False
+        except AtProtocolError as e:
+            self.app.handle_error(e, "like")
+            return False
+
+    def unfavourite(self, status_id: str) -> bool:
+        """Unlike a status."""
+        try:
+            self.client.unlike(status_id)
+            return True
+        except AtProtocolError as e:
+            self.app.handle_error(e, "unlike")
+            return False
+
+    def delete_status(self, status_id: str) -> bool:
+        """Delete a post."""
+        try:
+            self.client.delete_post(status_id)
+            return True
+        except AtProtocolError as e:
+            self.app.handle_error(e, "delete")
+            return False
+
+    # ============ User Methods ============
+
+    def get_user(self, user_id: str) -> Optional[UniversalUser]:
+        """Get user by DID or handle."""
+        try:
+            profile = self.client.get_profile(actor=user_id)
+            user = bluesky_profile_to_universal(profile)
+            if user:
+                self.user_cache.add_user(user)
+            return user
+        except AtProtocolError as e:
+            self.app.handle_error(e, "get user")
+            return None
+
+    def search_users(self, query: str, limit: int = 10) -> List[UniversalUser]:
+        """Search for users."""
+        try:
+            from atproto import models
+            params = models.AppBskyActorSearchActors.Params(
+                q=query,
+                limit=min(limit, 100)
+            )
+            response = self.client.app.bsky.actor.search_actors(params)
+            return self._convert_profiles(response.actors)
+        except AtProtocolError as e:
+            self.app.handle_error(e, "search users")
+            return []
+
+    def lookup_user_by_name(self, name: str) -> Optional[UniversalUser]:
+        """Look up user by handle."""
+        return self.get_user(name)
+
+    def follow(self, user_id: str) -> bool:
+        """Follow a user."""
+        try:
+            self.client.follow(user_id)
+            return True
+        except AtProtocolError as e:
+            self.app.handle_error(e, "follow")
+            return False
+
+    def unfollow(self, user_id: str) -> bool:
+        """Unfollow a user."""
+        try:
+            self.client.unfollow(user_id)
+            return True
+        except AtProtocolError as e:
+            self.app.handle_error(e, "unfollow")
+            return False
+
+    def block(self, user_id: str) -> bool:
+        """Block a user."""
+        try:
+            self.client.app.bsky.graph.block.create(self._me.id, {'subject': user_id})
+            return True
+        except AtProtocolError as e:
+            self.app.handle_error(e, "block")
+            return False
+
+    def unblock(self, user_id: str) -> bool:
+        """Unblock a user."""
+        try:
+            # Need to find and delete the block record
+            # This is more complex in AT Protocol
+            return False
+        except AtProtocolError as e:
+            self.app.handle_error(e, "unblock")
+            return False
+
+    def mute(self, user_id: str) -> bool:
+        """Mute a user."""
+        try:
+            self.client.mute(user_id)
+            return True
+        except AtProtocolError as e:
+            self.app.handle_error(e, "mute")
+            return False
+
+    def unmute(self, user_id: str) -> bool:
+        """Unmute a user."""
+        try:
+            self.client.unmute(user_id)
+            return True
+        except AtProtocolError as e:
+            self.app.handle_error(e, "unmute")
+            return False
+
+    def get_followers(self, user_id: str, limit: int = 80, cursor: str = None) -> List[UniversalUser]:
+        """Get followers of a user."""
+        try:
+            params = {'actor': user_id, 'limit': min(limit, 100)}
+            if cursor:
+                params['cursor'] = cursor
+
+            response = self.client.get_followers(**params)
+            return self._convert_profiles(response.followers)
+        except AtProtocolError as e:
+            self.app.handle_error(e, "followers")
+            return []
+
+    def get_following(self, user_id: str, limit: int = 80, cursor: str = None) -> List[UniversalUser]:
+        """Get users that a user is following."""
+        try:
+            params = {'actor': user_id, 'limit': min(limit, 100)}
+            if cursor:
+                params['cursor'] = cursor
+
+            response = self.client.get_follows(**params)
+            return self._convert_profiles(response.follows)
+        except AtProtocolError as e:
+            self.app.handle_error(e, "following")
+            return []

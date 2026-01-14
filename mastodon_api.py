@@ -200,11 +200,16 @@ class mastodon(object):
 		# Initialize platform backend with user cache
 		_log("Initializing platform backend...")
 		self._platform = MastodonAccount(self.app, index, self.api, self.me, self.confpath, self.max_chars)
+		_log("Platform backend initialized")
 
 		# Migrate global user cache to per-account if this is the first run
+		_log("Migrating user cache...")
 		self._migrate_user_cache()
+		_log("User cache migrated")
 
+		_log("Finishing init...")
 		self._finish_init(index)
+		_log("Init finished")
 
 		# Create default timelines for Mastodon
 		_log("Creating default timelines...")

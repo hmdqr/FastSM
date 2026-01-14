@@ -616,6 +616,124 @@ class BlueskyAccount(PlatformAccount):
             self.app.handle_error(e, "delete")
             return False
 
+    def pin_status(self, status_id: str) -> bool:
+        """Pin a status to your profile by updating the profile record."""
+        try:
+            # Get the post to get its CID
+            post_response = self.client.get_posts([status_id])
+            if not post_response.posts:
+                return False
+            
+            post = post_response.posts[0]
+            post_cid = getattr(post, 'cid', '')
+            
+            if not post_cid:
+                return False
+            
+            # Try to get current profile record, handle if it doesn't exist
+            current_value = None
+            try:
+                profile_response = self.client.com.atproto.repo.get_record({
+                    'repo': self.client.me.did,
+                    'collection': 'app.bsky.actor.profile',
+                    'rkey': 'self'
+                })
+                current_value = profile_response.value if profile_response else None
+            except Exception:
+                # Profile record doesn't exist yet, will create new one
+                current_value = None
+            
+            # Create strong reference to the post
+            pinned_post = {
+                'uri': status_id,
+                'cid': post_cid
+            }
+            
+            # Build updated profile record
+            updated_profile = {
+                '$type': 'app.bsky.actor.profile',
+                'pinnedPost': pinned_post
+            }
+            
+            if current_value:
+                # Preserve existing profile data
+                display_name = getattr(current_value, 'display_name', None) or getattr(current_value, 'displayName', None)
+                if display_name:
+                    updated_profile['displayName'] = display_name
+                description = getattr(current_value, 'description', None)
+                if description:
+                    updated_profile['description'] = description
+                avatar = getattr(current_value, 'avatar', None)
+                if avatar:
+                    updated_profile['avatar'] = avatar
+                banner = getattr(current_value, 'banner', None)
+                if banner:
+                    updated_profile['banner'] = banner
+            
+            # Put the updated profile (creates if doesn't exist)
+            self.client.com.atproto.repo.put_record({
+                'repo': self.client.me.did,
+                'collection': 'app.bsky.actor.profile',
+                'rkey': 'self',
+                'record': updated_profile
+            })
+            
+            return True
+        except (AtProtocolError, InvokeTimeoutError) as e:
+            self.app.handle_error(e, "pin post")
+            return False
+
+    def unpin_status(self, status_id: str) -> bool:
+        """Unpin a status from your profile by updating the profile record."""
+        try:
+            # Try to get current profile record
+            current_value = None
+            try:
+                profile_response = self.client.com.atproto.repo.get_record({
+                    'repo': self.client.me.did,
+                    'collection': 'app.bsky.actor.profile',
+                    'rkey': 'self'
+                })
+                current_value = profile_response.value if profile_response else None
+            except Exception:
+                # No profile record, nothing to unpin
+                return True
+            
+            if not current_value:
+                return True  # Nothing to unpin
+            
+            # Build updated profile record without pinnedPost
+            updated_profile = {
+                '$type': 'app.bsky.actor.profile'
+            }
+            
+            # Preserve existing profile data (but not pinnedPost)
+            display_name = getattr(current_value, 'display_name', None) or getattr(current_value, 'displayName', None)
+            if display_name:
+                updated_profile['displayName'] = display_name
+            description = getattr(current_value, 'description', None)
+            if description:
+                updated_profile['description'] = description
+            avatar = getattr(current_value, 'avatar', None)
+            if avatar:
+                updated_profile['avatar'] = avatar
+            banner = getattr(current_value, 'banner', None)
+            if banner:
+                updated_profile['banner'] = banner
+            
+            # Put the updated profile without pinnedPost
+            self.client.com.atproto.repo.put_record({
+                'repo': self.client.me.did,
+                'collection': 'app.bsky.actor.profile',
+                'rkey': 'self',
+                'record': updated_profile
+            })
+            
+            return True
+        except (AtProtocolError, InvokeTimeoutError) as e:
+            self.app.handle_error(e, "unpin post")
+            return False
+
     # ============ User Methods ============
 
     def get_user(self, user_id: str) -> Optional[UniversalUser]:

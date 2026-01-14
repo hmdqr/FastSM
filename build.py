@@ -119,12 +119,11 @@ def copy_data_files(script_dir: Path, dest_dir: Path, include_docs: bool = True)
             shutil.rmtree(sounds_dst)
         shutil.copytree(sounds_src, sounds_dst)
 
-    # Keymap files
-    for keymap in ["keymap.keymap", "keymac.keymap"]:
-        keymap_src = script_dir / keymap
-        if keymap_src.exists():
-            print(f"Copying {keymap}...")
-            shutil.copy2(keymap_src, dest_dir / keymap)
+    # Keymap file (invisible hotkeys only supported on Windows)
+    keymap_src = script_dir / "keymap.keymap"
+    if keymap_src.exists():
+        print("Copying keymap.keymap...")
+        shutil.copy2(keymap_src, dest_dir / "keymap.keymap")
 
     # Docs folder (skip for macOS app bundle - goes in DMG instead)
     if include_docs:

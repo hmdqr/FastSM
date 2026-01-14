@@ -725,6 +725,22 @@ class MastodonAccount(PlatformAccount):
         except MastodonError:
             return False
 
+    def accept_follow_request(self, user_id: str) -> bool:
+        """Accept an incoming follow request."""
+        try:
+            self.api.follow_request_authorize(id=user_id)
+            return True
+        except MastodonError:
+            return False
+
+    def reject_follow_request(self, user_id: str) -> bool:
+        """Reject an incoming follow request."""
+        try:
+            self.api.follow_request_reject(id=user_id)
+            return True
+        except MastodonError:
+            return False
+
     def get_followers(self, user_id: str, limit: int = 80) -> List[UniversalUser]:
         """Get followers of a user."""
         try:

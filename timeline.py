@@ -703,8 +703,9 @@ class timeline(object):
 		for i in self.statuses:
 			# Use cached display string if available
 			cache_attr = '_display_cache'
-			if hasattr(i, cache_attr):
-				items.append(getattr(i, cache_attr))
+			cached = getattr(i, cache_attr, None)
+			if cached is not None:
+				items.append(cached)
 			else:
 				if self.type == "notifications":
 					display = self.app.process_notification(i)
@@ -712,7 +713,11 @@ class timeline(object):
 					display = self.app.process_conversation(i)
 				else:
 					display = self.app.process_status(i)
-				setattr(i, cache_attr, display)
+				# Try to cache, but don't fail if object doesn't support it
+				try:
+					setattr(i, cache_attr, display)
+				except (AttributeError, TypeError):
+					pass
 				items.append(display)
 		return items
 
@@ -726,8 +731,11 @@ class timeline(object):
 			else:
 				# mentions now treated same as home/user/etc.
 				processed = self.app.process_status(i)
-			# Cache the display string on the item
-			i._display_cache = processed
+			# Cache the display string on the item (if supported)
+			try:
+				i._display_cache = processed
+			except (AttributeError, TypeError):
+				pass
 
 			if not self.app.prefs.reversed:
 				items2.append(processed)

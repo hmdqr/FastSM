@@ -207,4 +207,18 @@ class invisible_interface(object):
 		if status:
 			misc.pin_toggle(get_app().currentAccount, status)
 
+	def ContextMenu(self):
+		"""Open the context menu from invisible interface."""
+		import wx
+		def show_menu():
+			if not main.window.IsShown():
+				main.window.Show(True)
+				main.window.Raise()
+			# Sync the list selection
+			main.window.list.SetSelection(get_app().currentAccount.currentIndex)
+			main.window.list2.SetSelection(get_app().currentAccount.currentTimeline.index)
+			main.window.list2.SetFocus()
+			main.window.OnPostContextMenu(None)
+		wx.CallAfter(show_menu)
+
 inv=invisible_interface()

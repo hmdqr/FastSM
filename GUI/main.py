@@ -185,6 +185,15 @@ class MainGui(wx.Frame):
 		self.Bind(wx.EVT_MENU, self.OnCleanUserDb, m_clean_user_db)
 		self.menuBar.Append(menu6, "&Help")
 		self.SetMenuBar(self.menuBar)
+
+		# Add accelerator for context menu (Alt+M)
+		self.context_menu_id = wx.NewIdRef()
+		self.Bind(wx.EVT_MENU, self.OnPostContextMenu, id=self.context_menu_id)
+		accel = wx.AcceleratorTable([
+			(wx.ACCEL_ALT, ord('M'), self.context_menu_id),
+		])
+		self.SetAcceleratorTable(accel)
+
 		self.list_label=wx.StaticText(self.panel, -1, label="Timelines")
 		self.list=wx.ListBox(self.panel, -1)
 		self.main_box.Add(self.list, 0, wx.ALL, 10)
@@ -198,11 +207,12 @@ class MainGui(wx.Frame):
 		self.panel.Layout()
 
 	def register_keys(self):
+		# Invisible hotkeys not supported on Mac
+		if platform.system() == "Darwin":
+			self.invisible = False
+			return
 		self.invisible=True
-		if platform.system()=="Darwin":
-			f=open("keymac.keymap","r")
-		else:
-			f=open("keymap.keymap","r")
+		f=open("keymap.keymap","r")
 		keys=f.read().split("\n")
 		f.close()
 		for i in keys:
@@ -210,6 +220,9 @@ class MainGui(wx.Frame):
 			success=invisible.register_key(key[0],key[1])
 
 	def unregister_keys(self):
+		# Invisible hotkeys not supported on Mac
+		if platform.system() == "Darwin":
+			return
 		self.invisible=False
 		f=open("keymap.keymap","r")
 		keys=f.read().split("\n")
@@ -229,6 +242,10 @@ class MainGui(wx.Frame):
 		return item
 
 	def ToggleWindow(self):
+		# Window hiding not supported on Mac
+		if platform.system() == "Darwin":
+			self.Raise()
+			return
 		if self.IsShown():
 			self.Show(False)
 			get_app().prefs.window_shown=False
@@ -460,69 +477,206 @@ class MainGui(wx.Frame):
 			speak.speak("No messages in this conversation")
 
 	def OnPostContextMenu(self, event):
-		"""Show context menu for posts list."""
+		"""Show context menu for posts list - context-aware based on timeline type."""
 		# Make sure we have a valid selection
 		if self.list2.GetSelection() < 0:
 			return
 
 		menu = wx.Menu()
+		tl_type = get_app().currentAccount.currentTimeline.type
+		item = get_app().currentAccount.currentTimeline.statuses[get_app().currentAccount.currentTimeline.index]
 
-		# Core actions
-		m_view = menu.Append(-1, "View post")
-		self.Bind(wx.EVT_MENU, self.OnView, m_view)
+		if tl_type == "conversations":
+			# Conversations menu - focused on opening/replying to DMs
+			m_open = menu.Append(-1, "Open conversation")
+			self.Bind(wx.EVT_MENU, self.OnConversation, m_open)
 
-		m_reply = menu.Append(-1, "Reply")
-		self.Bind(wx.EVT_MENU, self.OnReply, m_reply)
+			m_reply = menu.Append(-1, "Reply")
+			self.Bind(wx.EVT_MENU, self.OnMessage, m_reply)
 
-		m_boost = menu.Append(-1, "Boost")
-		self.Bind(wx.EVT_MENU, self.OnRetweet, m_boost)
+			menu.AppendSeparator()
 
-		m_quote = menu.Append(-1, "Quote")
-		self.Bind(wx.EVT_MENU, self.OnQuote, m_quote)
+			m_copy = menu.Append(-1, "Copy to clipboard")
+			self.Bind(wx.EVT_MENU, self.onCopy, m_copy)
 
-		m_fav = menu.Append(-1, "Favourite")
-		self.Bind(wx.EVT_MENU, self.OnLike, m_fav)
+			menu.AppendSeparator()
 
-		menu.AppendSeparator()
+			# User options for conversation participants
+			m_user_profile = menu.Append(-1, "User profile")
+			self.Bind(wx.EVT_MENU, self.OnUserProfile, m_user_profile)
 
-		m_copy = menu.Append(-1, "Copy to clipboard")
-		self.Bind(wx.EVT_MENU, self.onCopy, m_copy)
+			m_user_tl = menu.Append(-1, "User timeline")
+			self.Bind(wx.EVT_MENU, self.OnUserTimeline, m_user_tl)
 
-		m_url = menu.Append(-1, "Open URL in post")
-		self.Bind(wx.EVT_MENU, self.OnUrl, m_url)
+			menu.AppendSeparator()
 
-		m_post_url = menu.Append(-1, "Open post URL")
-		self.Bind(wx.EVT_MENU, self.OnTweetUrl, m_post_url)
+			m_follow = menu.Append(-1, "Follow")
+			self.Bind(wx.EVT_MENU, self.OnFollow, m_follow)
 
-		menu.AppendSeparator()
+			m_unfollow = menu.Append(-1, "Unfollow")
+			self.Bind(wx.EVT_MENU, self.OnUnfollow, m_unfollow)
 
-		m_user_tl = menu.Append(-1, "User timeline")
-		self.Bind(wx.EVT_MENU, self.OnUserTimeline, m_user_tl)
+			m_mute = menu.Append(-1, "Mute user")
+			self.Bind(wx.EVT_MENU, self.OnMuteUser, m_mute)
 
-		m_user_profile = menu.Append(-1, "User profile")
-		self.Bind(wx.EVT_MENU, self.OnUserProfile, m_user_profile)
+			m_unmute = menu.Append(-1, "Unmute user")
+			self.Bind(wx.EVT_MENU, self.OnUnmuteUser, m_unmute)
 
-		m_conversation = menu.Append(-1, "Load conversation")
-		self.Bind(wx.EVT_MENU, self.OnConversation, m_conversation)
+		elif tl_type == "notifications":
+			# Check notification type
+			notif_type = getattr(item, 'type', '')
 
-		menu.AppendSeparator()
+			if notif_type == 'follow_request':
+				# Follow request - show accept/reject first
+				m_accept = menu.Append(-1, "Accept follow request")
+				self.Bind(wx.EVT_MENU, self.OnAcceptFollowRequest, m_accept)
 
-		m_follow = menu.Append(-1, "Follow")
-		self.Bind(wx.EVT_MENU, self.OnFollow, m_follow)
+				m_reject = menu.Append(-1, "Reject follow request")
+				self.Bind(wx.EVT_MENU, self.OnRejectFollowRequest, m_reject)
 
-		m_unfollow = menu.Append(-1, "Unfollow")
-		self.Bind(wx.EVT_MENU, self.OnUnfollow, m_unfollow)
+				menu.AppendSeparator()
 
-		m_mute = menu.Append(-1, "Mute user")
-		self.Bind(wx.EVT_MENU, self.OnMuteUser, m_mute)
+				m_user_profile = menu.Append(-1, "User profile")
+				self.Bind(wx.EVT_MENU, self.OnUserProfile, m_user_profile)
 
-		m_unmute = menu.Append(-1, "Unmute user")
-		self.Bind(wx.EVT_MENU, self.OnUnmuteUser, m_unmute)
+				m_user_tl = menu.Append(-1, "User timeline")
+				self.Bind(wx.EVT_MENU, self.OnUserTimeline, m_user_tl)
 
-		menu.AppendSeparator()
+				menu.AppendSeparator()
 
-		m_delete = menu.Append(-1, "Delete")
-		self.Bind(wx.EVT_MENU, self.OnDelete, m_delete)
+				m_block = menu.Append(-1, "Block user")
+				self.Bind(wx.EVT_MENU, self.OnBlockUser, m_block)
+
+			elif notif_type == 'follow':
+				# Follow notifications - user-focused options only
+				m_user_profile = menu.Append(-1, "User profile")
+				self.Bind(wx.EVT_MENU, self.OnUserProfile, m_user_profile)
+
+				m_user_tl = menu.Append(-1, "User timeline")
+				self.Bind(wx.EVT_MENU, self.OnUserTimeline, m_user_tl)
+
+				menu.AppendSeparator()
+
+				m_follow = menu.Append(-1, "Follow back")
+				self.Bind(wx.EVT_MENU, self.OnFollow, m_follow)
+
+				m_unfollow = menu.Append(-1, "Unfollow")
+				self.Bind(wx.EVT_MENU, self.OnUnfollow, m_unfollow)
+
+				menu.AppendSeparator()
+
+				m_mute = menu.Append(-1, "Mute user")
+				self.Bind(wx.EVT_MENU, self.OnMuteUser, m_mute)
+
+				m_unmute = menu.Append(-1, "Unmute user")
+				self.Bind(wx.EVT_MENU, self.OnUnmuteUser, m_unmute)
+
+				m_block = menu.Append(-1, "Block user")
+				self.Bind(wx.EVT_MENU, self.OnBlockUser, m_block)
+
+				m_unblock = menu.Append(-1, "Unblock user")
+				self.Bind(wx.EVT_MENU, self.OnUnblockUser, m_unblock)
+			else:
+				# Notifications with posts (favourite, reblog, mention, etc.)
+				m_view = menu.Append(-1, "View post")
+				self.Bind(wx.EVT_MENU, self.OnView, m_view)
+
+				m_reply = menu.Append(-1, "Reply")
+				self.Bind(wx.EVT_MENU, self.OnReply, m_reply)
+
+				m_boost = menu.Append(-1, "Boost")
+				self.Bind(wx.EVT_MENU, self.OnRetweet, m_boost)
+
+				m_fav = menu.Append(-1, "Favourite")
+				self.Bind(wx.EVT_MENU, self.OnLike, m_fav)
+
+				menu.AppendSeparator()
+
+				m_copy = menu.Append(-1, "Copy to clipboard")
+				self.Bind(wx.EVT_MENU, self.onCopy, m_copy)
+
+				m_url = menu.Append(-1, "Open URL in post")
+				self.Bind(wx.EVT_MENU, self.OnUrl, m_url)
+
+				m_post_url = menu.Append(-1, "Open post URL")
+				self.Bind(wx.EVT_MENU, self.OnTweetUrl, m_post_url)
+
+				menu.AppendSeparator()
+
+				m_user_tl = menu.Append(-1, "User timeline")
+				self.Bind(wx.EVT_MENU, self.OnUserTimeline, m_user_tl)
+
+				m_user_profile = menu.Append(-1, "User profile")
+				self.Bind(wx.EVT_MENU, self.OnUserProfile, m_user_profile)
+
+				m_conversation = menu.Append(-1, "Load conversation")
+				self.Bind(wx.EVT_MENU, self.OnConversation, m_conversation)
+
+				menu.AppendSeparator()
+
+				m_follow = menu.Append(-1, "Follow")
+				self.Bind(wx.EVT_MENU, self.OnFollow, m_follow)
+
+				m_unfollow = menu.Append(-1, "Unfollow")
+				self.Bind(wx.EVT_MENU, self.OnUnfollow, m_unfollow)
+
+		else:
+			# Standard post menu for all other timelines
+			m_view = menu.Append(-1, "View post")
+			self.Bind(wx.EVT_MENU, self.OnView, m_view)
+
+			m_reply = menu.Append(-1, "Reply")
+			self.Bind(wx.EVT_MENU, self.OnReply, m_reply)
+
+			m_boost = menu.Append(-1, "Boost")
+			self.Bind(wx.EVT_MENU, self.OnRetweet, m_boost)
+
+			m_quote = menu.Append(-1, "Quote")
+			self.Bind(wx.EVT_MENU, self.OnQuote, m_quote)
+
+			m_fav = menu.Append(-1, "Favourite")
+			self.Bind(wx.EVT_MENU, self.OnLike, m_fav)
+
+			menu.AppendSeparator()
+
+			m_copy = menu.Append(-1, "Copy to clipboard")
+			self.Bind(wx.EVT_MENU, self.onCopy, m_copy)
+
+			m_url = menu.Append(-1, "Open URL in post")
+			self.Bind(wx.EVT_MENU, self.OnUrl, m_url)
+
+			m_post_url = menu.Append(-1, "Open post URL")
+			self.Bind(wx.EVT_MENU, self.OnTweetUrl, m_post_url)
+
+			menu.AppendSeparator()
+
+			m_user_tl = menu.Append(-1, "User timeline")
+			self.Bind(wx.EVT_MENU, self.OnUserTimeline, m_user_tl)
+
+			m_user_profile = menu.Append(-1, "User profile")
+			self.Bind(wx.EVT_MENU, self.OnUserProfile, m_user_profile)
+
+			m_conversation = menu.Append(-1, "Load conversation")
+			self.Bind(wx.EVT_MENU, self.OnConversation, m_conversation)
+
+			menu.AppendSeparator()
+
+			m_follow = menu.Append(-1, "Follow")
+			self.Bind(wx.EVT_MENU, self.OnFollow, m_follow)
+
+			m_unfollow = menu.Append(-1, "Unfollow")
+			self.Bind(wx.EVT_MENU, self.OnUnfollow, m_unfollow)
+
+			m_mute = menu.Append(-1, "Mute user")
+			self.Bind(wx.EVT_MENU, self.OnMuteUser, m_mute)
+
+			m_unmute = menu.Append(-1, "Unmute user")
+			self.Bind(wx.EVT_MENU, self.OnUnmuteUser, m_unmute)
+
+			menu.AppendSeparator()
+
+			m_delete = menu.Append(-1, "Delete")
+			self.Bind(wx.EVT_MENU, self.OnDelete, m_delete)
 
 		self.PopupMenu(menu)
 		menu.Destroy()
@@ -735,6 +889,57 @@ class MainGui(wx.Frame):
 		status = self.get_current_status()
 		if status:
 			misc.unmute(get_app().currentAccount, status)
+
+	def OnBlockUser(self, event=None):
+		status = self.get_current_status()
+		if status:
+			misc.block(get_app().currentAccount, status)
+
+	def OnUnblockUser(self, event=None):
+		status = self.get_current_status()
+		if status:
+			misc.unblock(get_app().currentAccount, status)
+
+	def OnAcceptFollowRequest(self, event=None):
+		"""Accept a follow request from the notifications timeline."""
+		account = get_app().currentAccount
+		if account.currentTimeline.type != "notifications":
+			return
+		item = account.currentTimeline.statuses[account.currentTimeline.index]
+		if getattr(item, 'type', '') != 'follow_request':
+			return
+		user = getattr(item, 'account', None)
+		if not user:
+			return
+		try:
+			if hasattr(account, 'accept_follow_request'):
+				account.accept_follow_request(user.id)
+				speak.speak(f"Accepted follow request from {user.acct}")
+				sound.play(account, "like")
+			else:
+				speak.speak("This platform does not support follow requests")
+		except Exception as error:
+			account.app.handle_error(error, "accept follow request")
+
+	def OnRejectFollowRequest(self, event=None):
+		"""Reject a follow request from the notifications timeline."""
+		account = get_app().currentAccount
+		if account.currentTimeline.type != "notifications":
+			return
+		item = account.currentTimeline.statuses[account.currentTimeline.index]
+		if getattr(item, 'type', '') != 'follow_request':
+			return
+		user = getattr(item, 'account', None)
+		if not user:
+			return
+		try:
+			if hasattr(account, 'reject_follow_request'):
+				account.reject_follow_request(user.id)
+				speak.speak(f"Rejected follow request from {user.acct}")
+			else:
+				speak.speak("This platform does not support follow requests")
+		except Exception as error:
+			account.app.handle_error(error, "reject follow request")
 
 	def OnCloseTimeline(self, event=None):
 		tl=get_app().currentAccount.currentTimeline

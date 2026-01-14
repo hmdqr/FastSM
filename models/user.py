@@ -49,50 +49,25 @@ class UniversalUser:
 
 
 class UserCache:
-    """Per-account user cache for looking up users by ID or name."""
+    """Per-account user cache for looking up users by ID or name.
 
-    MAX_CACHE_SIZE = 500  # Limit cache to prevent slow startup
+    This is an in-memory only cache - no persistence to disk.
+    Users are collected as the app runs and discarded on exit.
+    """
+
+    MAX_CACHE_SIZE = 500  # Limit cache size
 
     def __init__(self, confpath: str, platform: str, account_id: str):
-        self.confpath = confpath
-        self.platform = platform
-        self.account_id = account_id
         self.users: List[UniversalUser] = []
         self.unknown_users: List[str] = []  # IDs to look up later
-        self._cache_file = os.path.join(confpath, f"usercache_{platform}_{account_id}")
-        self._loaded = False
 
     def load(self) -> bool:
-        """Load cache from disk (runs in background thread)."""
-        import threading
-        # Start loading in background so it doesn't block startup
-        threading.Thread(target=self._load_async, daemon=True).start()
+        """No-op - cache is in-memory only."""
         return True
 
-    def _load_async(self):
-        """Actually load the cache file."""
-        try:
-            with open(self._cache_file, "rb") as f:
-                users = pickle.load(f)
-            # Trim to max size (keep most recent)
-            if len(users) > self.MAX_CACHE_SIZE:
-                users = users[:self.MAX_CACHE_SIZE]
-            self.users = users
-            self._loaded = True
-        except:
-            self.users = []
-            self._loaded = True
-
     def save(self):
-        """Save cache to disk."""
-        try:
-            # Trim to max size before saving
-            users_to_save = self.users[:self.MAX_CACHE_SIZE]
-            os.makedirs(os.path.dirname(self._cache_file), exist_ok=True)
-            with open(self._cache_file, "wb") as f:
-                pickle.dump(users_to_save, f)
-        except Exception as e:
-            print(f"Error saving user cache: {e}")
+        """No-op - cache is in-memory only."""
+        pass
 
     def add_user(self, user: UniversalUser):
         """Add or update a user in the cache."""

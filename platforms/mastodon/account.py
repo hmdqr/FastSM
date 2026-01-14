@@ -29,34 +29,21 @@ class MastodonAccount(PlatformAccount):
     supports_editing = True
 
     def __init__(self, app, index: int, api: Mastodon, me, confpath: str, max_chars: int = 500):
-        import time
-        import sys
-        _start = time.time()
-        def _log(msg):
-            print(f"      [{time.time() - _start:.2f}s] platform: {msg}")
-            sys.stdout.flush()
-
-        _log("Starting platform init...")
         super().__init__(app, index)
         self.api = api
-        _log("Converting user to universal...")
         self._me = mastodon_user_to_universal(me)
         self._raw_me = me  # Keep original for compatibility
         self.confpath = confpath
         self._max_chars = max_chars
 
-        # Initialize user cache
-        _log("Loading user cache...")
+        # Initialize user cache (in-memory only, no disk persistence)
         self.user_cache = UserCache(confpath, 'mastodon', str(self._me.id))
-        self.user_cache.load()
-        _log(f"User cache loaded ({len(self.user_cache.users)} users)")
 
         # Get default visibility
         try:
             self.default_visibility = getattr(me, 'source', {}).get('privacy', 'public')
         except:
             self.default_visibility = 'public'
-        _log("Platform init complete")
 
     @property
     def me(self) -> UniversalUser:

@@ -190,21 +190,8 @@ class Application:
 		if self.prefs.invisible:
 			main.window.register_keys()
 
-		_log("Loading user cache (async)...")
-		# Load user cache in background - don't block startup
-		def load_global_cache():
-			try:
-				with open(self.confpath + "/usercache", "rb") as f:
-					users = pickle.loads(f.read())
-				# Limit size to prevent future slow loads
-				self.users = users[:500] if len(users) > 500 else users
-			except:
-				pass
-		threading.Thread(target=load_global_cache, daemon=True).start()
-
-		if not self.prefs.user_reversed:
-			self.users = []
-			self.prefs.user_reversed = True
+		# User cache is now in-memory only per-account, no global cache needed
+		self.users = []
 
 		_log("Loading timeline settings...")
 		self.load_timeline_settings()
@@ -279,18 +266,8 @@ class Application:
 			print(f"Error loading account {index}: {e}")
 
 	def save_users(self):
-		"""Save user caches to disk (per-account caches)."""
-		# Save per-account caches
-		for account in self.accounts:
-			if hasattr(account, 'user_cache') and account.user_cache:
-				account.user_cache.save()
-		# Also save global cache for backward compatibility
-		try:
-			f = open(self.confpath + "/usercache", "wb")
-			f.write(pickle.dumps(self.users))
-			f.close()
-		except:
-			pass
+		"""No-op - user cache is in-memory only now."""
+		pass
 
 	def save_timeline_settings(self):
 		"""Save timeline settings to disk."""

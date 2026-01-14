@@ -277,20 +277,30 @@ class MastodonAccount(PlatformAccount):
             remote_api = self.get_or_create_remote_api(instance_url)
 
             # Look up the user on the remote instance
-            results = remote_api.account_search(username, limit=1)
-            if not results:
-                return []
-
-            # Find exact match
+            # Try account_lookup first (works without auth), fall back to search
             remote_user = None
-            for user in results:
-                if user.acct.lower() == username.lower() or user.username.lower() == username.lower():
-                    remote_user = user
-                    break
+            try:
+                remote_user = remote_api.account_lookup(username)
+            except Exception:
+                pass
 
             if not remote_user:
-                # Take first result if no exact match
-                remote_user = results[0]
+                # Fall back to search
+                try:
+                    results = remote_api.account_search(username, limit=5)
+                    if results:
+                        for user in results:
+                            if user.acct.lower() == username.lower() or user.username.lower() == username.lower():
+                                remote_user = user
+                                break
+                        if not remote_user:
+                            remote_user = results[0]
+                except Exception:
+                    pass
+
+            if not remote_user:
+                print(f"Could not find user {username} on {instance_url}")
+                return []
 
             # Get the user's statuses
             statuses = remote_api.account_statuses(remote_user.id, limit=limit, **kwargs)
@@ -325,9 +335,11 @@ class MastodonAccount(PlatformAccount):
                     status.url = f"{instance_url}/@{status.account.acct}/{status.id}"
 
             return result
-        except MastodonError:
+        except MastodonError as e:
+            print(f"Remote user timeline MastodonError: {e}")
             return []
-        except Exception:
+        except Exception as e:
+            print(f"Remote user timeline error: {e}")
             return []
 
     def resolve_remote_status(self, status) -> str:

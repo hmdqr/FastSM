@@ -164,8 +164,12 @@ class timeline(object):
 
 	def _load_remote_user(self, **kwargs):
 		"""Helper to load remote user timeline"""
+		print(f"Loading remote user: {self._remote_username} from {self._remote_url}")
 		if hasattr(self.account, '_platform') and self.account._platform:
-			return self.account._platform.get_remote_user_timeline(self._remote_url, self._remote_username, **kwargs)
+			result = self.account._platform.get_remote_user_timeline(self._remote_url, self._remote_username, **kwargs)
+			print(f"Got {len(result)} statuses")
+			return result
+		print("No platform backend")
 		return []
 
 	def _search_statuses(self, **kwargs):

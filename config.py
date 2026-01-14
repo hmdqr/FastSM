@@ -6,9 +6,48 @@ import atexit
 import platform
 from collections.abc import MutableMapping
 
+# Cache for portable mode detection
+_portable_path = None
+_portable_checked = False
+
+
+def is_portable_mode():
+	"""Check if running in portable mode (userdata folder exists in current directory)."""
+	global _portable_path, _portable_checked
+	if _portable_checked:
+		return _portable_path is not None
+
+	_portable_checked = True
+	# Only check for portable mode on Windows and Linux, not macOS
+	if platform.system() == "Darwin":
+		return False
+
+	# Check for userdata folder in current directory
+	userdata_path = os.path.join(os.getcwd(), "userdata")
+	if os.path.isdir(userdata_path):
+		_portable_path = userdata_path
+		return True
+
+	return False
+
+
+def get_portable_path():
+	"""Get the portable userdata path, or None if not in portable mode."""
+	is_portable_mode()  # Ensure check has been done
+	return _portable_path
+
 
 def get_config_home():
-	"""Get the user config directory based on platform."""
+	"""Get the user config directory based on platform.
+
+	On Windows/Linux, if a 'userdata' folder exists in the current directory,
+	that folder will be used instead (portable mode).
+	"""
+	# Check for portable mode first (Windows/Linux only)
+	portable = get_portable_path()
+	if portable:
+		return portable
+
 	if platform.system() == "Windows":
 		return os.environ.get("APPDATA", os.path.expanduser("~"))
 	elif platform.system() == "Darwin":

@@ -238,6 +238,14 @@ def favourite(account, status):
 def pin_toggle(account, status):
 	"""Toggle pin status on a post (only works for your own posts)."""
 	try:
+		# Get the platform backend (account may be a wrapper)
+		platform = getattr(account, '_platform', account)
+		
+		# Check if the platform supports pinning
+		if not hasattr(platform, 'pin_status') or not hasattr(platform, 'unpin_status'):
+			speak.speak("This platform does not support pinning posts.")
+			return
+
 		# Get the actual status (not reblog wrapper)
 		actual_status = status.reblog if hasattr(status, 'reblog') and status.reblog else status
 
@@ -260,11 +268,7 @@ def pin_toggle(account, status):
 		# Toggle pin status
 		if getattr(actual_status, '_pinned', False) or getattr(actual_status, 'pinned', False):
 			# Unpin
-			if hasattr(account, 'unpin_status'):
-				success = account.unpin_status(status_id)
-			else:
-				account.api.status_unpin(id=status_id)
-				success = True
+			success = platform.unpin_status(status_id)
 			if success:
 				actual_status._pinned = False
 				actual_status.pinned = False
@@ -272,11 +276,7 @@ def pin_toggle(account, status):
 				sound.play(account, "unlike")
 		else:
 			# Pin
-			if hasattr(account, 'pin_status'):
-				success = account.pin_status(status_id)
-			else:
-				account.api.status_pin(id=status_id)
-				success = True
+			success = platform.pin_status(status_id)
 			if success:
 				actual_status._pinned = True
 				actual_status.pinned = True

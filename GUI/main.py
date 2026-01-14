@@ -609,7 +609,7 @@ class MainGui(wx.Frame):
 					]
 				if tl.type=="search" and tl.data in get_app().currentAccount.prefs.search_timelines:
 					get_app().currentAccount.prefs.search_timelines.remove(tl.data)
-				if tl.type in ("feed", "local", "federated"):
+				if tl.type in ("feed", "local", "federated", "favourites", "bookmarks"):
 					# Remove from custom_timelines
 					get_app().currentAccount.prefs.custom_timelines = [
 						ct for ct in get_app().currentAccount.prefs.custom_timelines
@@ -620,6 +620,14 @@ class MainGui(wx.Frame):
 					get_app().currentAccount.prefs.instance_timelines = [
 						inst for inst in get_app().currentAccount.prefs.instance_timelines
 						if inst.get('url') != tl.data
+					]
+				if tl.type == "remote_user":
+					# Remove from remote_user_timelines
+					inst_url = tl.data.get('url', '') if isinstance(tl.data, dict) else ''
+					username = tl.data.get('username', '') if isinstance(tl.data, dict) else ''
+					get_app().currentAccount.prefs.remote_user_timelines = [
+						rut for rut in get_app().currentAccount.prefs.remote_user_timelines
+						if not (rut.get('url') == inst_url and rut.get('username') == username)
 					]
 				get_app().currentAccount.timelines.remove(tl)
 				sound.play(get_app().currentAccount,"close")

@@ -190,14 +190,17 @@ class Application:
 		if self.prefs.invisible:
 			main.window.register_keys()
 
-		_log("Loading user cache...")
-		# Load user cache
-		try:
-			f = open(self.confpath + "/usercache", "rb")
-			self.users = pickle.loads(f.read())
-			f.close()
-		except:
-			pass
+		_log("Loading user cache (async)...")
+		# Load user cache in background - don't block startup
+		def load_global_cache():
+			try:
+				with open(self.confpath + "/usercache", "rb") as f:
+					users = pickle.loads(f.read())
+				# Limit size to prevent future slow loads
+				self.users = users[:500] if len(users) > 500 else users
+			except:
+				pass
+		threading.Thread(target=load_global_cache, daemon=True).start()
 
 		if not self.prefs.user_reversed:
 			self.users = []

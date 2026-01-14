@@ -51,6 +51,8 @@ class UniversalUser:
 class UserCache:
     """Per-account user cache for looking up users by ID or name."""
 
+    MAX_CACHE_SIZE = 500  # Limit cache to prevent slow startup
+
     def __init__(self, confpath: str, platform: str, account_id: str):
         self.confpath = confpath
         self.platform = platform
@@ -58,23 +60,37 @@ class UserCache:
         self.users: List[UniversalUser] = []
         self.unknown_users: List[str] = []  # IDs to look up later
         self._cache_file = os.path.join(confpath, f"usercache_{platform}_{account_id}")
+        self._loaded = False
 
     def load(self) -> bool:
-        """Load cache from disk."""
+        """Load cache from disk (runs in background thread)."""
+        import threading
+        # Start loading in background so it doesn't block startup
+        threading.Thread(target=self._load_async, daemon=True).start()
+        return True
+
+    def _load_async(self):
+        """Actually load the cache file."""
         try:
             with open(self._cache_file, "rb") as f:
-                self.users = pickle.load(f)
-            return True
+                users = pickle.load(f)
+            # Trim to max size (keep most recent)
+            if len(users) > self.MAX_CACHE_SIZE:
+                users = users[:self.MAX_CACHE_SIZE]
+            self.users = users
+            self._loaded = True
         except:
             self.users = []
-            return False
+            self._loaded = True
 
     def save(self):
         """Save cache to disk."""
         try:
+            # Trim to max size before saving
+            users_to_save = self.users[:self.MAX_CACHE_SIZE]
             os.makedirs(os.path.dirname(self._cache_file), exist_ok=True)
             with open(self._cache_file, "wb") as f:
-                pickle.dump(self.users, f)
+                pickle.dump(users_to_save, f)
         except Exception as e:
             print(f"Error saving user cache: {e}")
 
@@ -86,6 +102,9 @@ class UserCache:
         self.users = [u for u in self.users if u.id != user.id]
         # Insert at front (most recently seen)
         self.users.insert(0, user)
+        # Trim if too large
+        if len(self.users) > self.MAX_CACHE_SIZE:
+            self.users = self.users[:self.MAX_CACHE_SIZE]
 
     def add_users_from_status(self, status):
         """Extract and cache users from a status."""

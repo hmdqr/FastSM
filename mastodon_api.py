@@ -23,9 +23,11 @@ class mastodon(object):
 
 	def __init__(self, app, index):
 		import time
+		import sys
 		_init_start = time.time()
 		def _log(msg):
 			print(f"    [{time.time() - _init_start:.2f}s] account{index}: {msg}")
+			sys.stdout.flush()
 		self._log = _log
 
 		_log("Starting account init...")
@@ -97,9 +99,10 @@ class mastodon(object):
 	def _init_mastodon(self, index):
 		"""Initialize Mastodon account."""
 		_log = self._log
-		_log("Initializing Mastodon...")
+		_log("Initializing Mastodon, loading prefs...")
 		# Mastodon-specific config
 		self.prefs.instance_url = self.prefs.get("instance_url", "")
+		_log(f"Instance URL: {self.prefs.instance_url}")
 		self.prefs.access_token = self.prefs.get("access_token", "")
 		self.prefs.client_id = self.prefs.get("client_id", "")
 		self.prefs.client_secret = self.prefs.get("client_secret", "")
@@ -161,30 +164,38 @@ class mastodon(object):
 			access_token=self.prefs.access_token,
 			api_base_url=self.prefs.instance_url
 		)
+		_log("API client created")
 
 		# Verify credentials and get user info
-		_log("Verifying credentials...")
+		_log("Verifying credentials (API call)...")
 		try:
 			self.me = self.api.account_verify_credentials()
+			_log("Credentials verified OK")
 		except MastodonError as e:
 			speak.speak("Error verifying credentials: " + str(e))
 			# Clear tokens and try again
 			self.prefs.access_token = ""
 			sys.exit()
 
-		# Get instance info for character limit
+		# Get instance info for character limit (use cached if available)
 		_log("Getting instance info...")
-		try:
-			instance_info = self.api.instance()
-			if hasattr(instance_info, 'configuration') and hasattr(instance_info.configuration, 'statuses'):
-				self.max_chars = instance_info.configuration.statuses.max_characters
-			else:
+		cached_max_chars = self.prefs.get("cached_max_chars", 0)
+		if cached_max_chars > 0:
+			self.max_chars = cached_max_chars
+			_log(f"Using cached max_chars: {self.max_chars}")
+		else:
+			try:
+				instance_info = self.api.instance()
+				if hasattr(instance_info, 'configuration') and hasattr(instance_info.configuration, 'statuses'):
+					self.max_chars = instance_info.configuration.statuses.max_characters
+				else:
+					self.max_chars = 500
+				# Cache it for next time
+				self.prefs.cached_max_chars = self.max_chars
+			except:
 				self.max_chars = 500
-			# Get default visibility
-			self.default_visibility = getattr(self.me, 'source', {}).get('privacy', 'public')
-		except:
-			self.max_chars = 500
-			self.default_visibility = 'public'
+		# Get default visibility from user info (already fetched)
+		self.default_visibility = getattr(self.me, 'source', {}).get('privacy', 'public')
 
 		# Initialize platform backend with user cache
 		_log("Initializing platform backend...")

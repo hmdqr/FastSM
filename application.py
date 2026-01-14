@@ -79,9 +79,11 @@ class Application:
 			return
 
 		import time
+		import sys
 		_load_start = time.time()
 		def _log(msg):
 			print(f"  [{time.time() - _load_start:.2f}s] load: {msg}")
+			sys.stdout.flush()
 
 		_log("Importing modules...")
 		import sound

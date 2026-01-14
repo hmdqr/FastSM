@@ -225,17 +225,20 @@ class TimelineFilterDialog(wx.Dialog):
         """Restore selection to the status with the given ID, or top if not found."""
         from . import main as main_window
         if status_id is None:
+            self.timeline.index = 0
             main_window.window.list2.SetSelection(0)
             return
 
         # Find the status by ID
         for i, status in enumerate(self.timeline.statuses):
             if getattr(status, 'id', None) == status_id:
+                self.timeline.index = i
                 main_window.window.list2.SetSelection(i)
                 return
 
         # Not found, go to top
         if len(self.timeline.statuses) > 0:
+            self.timeline.index = 0
             main_window.window.list2.SetSelection(0)
 
     def on_apply(self, event):

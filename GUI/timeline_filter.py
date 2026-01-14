@@ -260,7 +260,7 @@ class TimelineFilterDialog(wx.Dialog):
         }
 
         # Save to account prefs for persistence
-        _save_filter_settings(self.account, self.timeline)
+        _save_filter_settings(self.timeline.account, self.timeline)
 
         # Filter statuses from the unfiltered list
         filtered = []
@@ -293,7 +293,7 @@ class TimelineFilterDialog(wx.Dialog):
             del self.timeline._filter_settings
 
         # Remove from saved prefs
-        _clear_filter_settings(self.account, self.timeline)
+        _clear_filter_settings(self.timeline.account, self.timeline)
 
         # Refresh the list and restore position
         main_window.window.refreshList()

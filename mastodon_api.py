@@ -30,6 +30,9 @@ class mastodon(object):
 		self.currentIndex = 0
 		self.currentStatus = None
 		self.confpath = ""
+		# Initialize streaming-related attributes early
+		self._pending_initial_loads = 0
+		self._initial_loads_lock = threading.Lock()
 		self.prefs = config.Config(name="FastSM/account"+str(index), autosave=True)
 		self.confpath = self.prefs._user_config_home+"/FastSM/account"+str(index)
 

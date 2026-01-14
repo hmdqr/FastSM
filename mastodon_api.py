@@ -110,6 +110,7 @@ class mastodon(object):
 				client_id, client_secret = Mastodon.create_app(
 					"FastSM",
 					scopes=['read', 'write', 'follow', 'push'],
+					redirect_uris='urn:ietf:wg:oauth:2.0:oob',
 					api_base_url=self.prefs.instance_url
 				)
 				self.prefs.client_id = client_id
@@ -126,7 +127,10 @@ class mastodon(object):
 					client_secret=self.prefs.client_secret,
 					api_base_url=self.prefs.instance_url
 				)
-				auth_url = temp_api.auth_request_url(scopes=['read', 'write', 'follow', 'push'])
+				auth_url = temp_api.auth_request_url(
+					scopes=['read', 'write', 'follow', 'push'],
+					redirect_uris='urn:ietf:wg:oauth:2.0:oob'
+				)
 				webbrowser.open(auth_url)
 
 				auth_code = ask(caption="Authorization Code",

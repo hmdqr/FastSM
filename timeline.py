@@ -468,10 +468,12 @@ class timeline(object):
 	def _do_load(self, back=False, speech=False, items=[]):
 		if items == []:
 			if back:
+				# Use unfiltered statuses for pagination if filter is applied
+				status_list = getattr(self, '_unfiltered_statuses', None) or self.statuses
 				if not self.app.prefs.reversed:
-					self.prev_kwargs['max_id'] = self.statuses[len(self.statuses)-1].id
+					self.prev_kwargs['max_id'] = status_list[len(status_list)-1].id
 				else:
-					self.prev_kwargs['max_id'] = self.statuses[0].id
+					self.prev_kwargs['max_id'] = status_list[0].id
 			tl = None
 			try:
 				# Determine how many pages to fetch

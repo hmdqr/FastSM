@@ -10,16 +10,17 @@ import speak
 
 def add_custom_timeline(account, tl_type, tl_id, tl_name, focus=True):
     """Add a custom timeline to the account."""
-    # Check if already exists in preferences
-    for ct in account.prefs.custom_timelines:
-        if ct.get('type') == tl_type and ct.get('id') == tl_id:
-            if focus:
-                get_app().alert("This timeline is already open.", "Error")
-            return False
+    # Check if already exists in preferences (skip pinned/scheduled as they're not persisted)
+    if tl_type not in ('pinned', 'scheduled'):
+        for ct in account.prefs.custom_timelines:
+            if ct.get('type') == tl_type and ct.get('id') == tl_id:
+                if focus:
+                    get_app().alert("This timeline is already open.", "Error")
+                return False
 
-    # Also check if timeline is already open (e.g., favourites, bookmarks)
+    # Also check if timeline is already open (e.g., favourites, bookmarks, pinned, scheduled)
     for tl in account.timelines:
-        if tl.type == tl_type:
+        if tl.type == tl_type and (tl.data == tl_id or tl_type in ('favourites', 'bookmarks', 'pinned', 'scheduled')):
             if focus:
                 get_app().alert("This timeline is already open.", "Error")
             return False
@@ -27,12 +28,13 @@ def add_custom_timeline(account, tl_type, tl_id, tl_name, focus=True):
     # Add the timeline
     account.timelines.append(timeline.timeline(account, name=tl_name, type=tl_type, data=tl_id))
 
-    # Save to preferences
-    account.prefs.custom_timelines.append({
-        'type': tl_type,
-        'id': tl_id,
-        'name': tl_name
-    })
+    # Save to preferences (but not for unique timelines like pinned/scheduled - they don't need persistence)
+    if tl_type not in ('pinned', 'scheduled'):
+        account.prefs.custom_timelines.append({
+            'type': tl_type,
+            'id': tl_id,
+            'name': tl_name
+        })
 
     main.window.refreshTimelines()
     if focus:

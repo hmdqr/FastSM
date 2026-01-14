@@ -4,6 +4,120 @@ import wx
 from application import get_app
 
 
+def should_show_status(status, settings, app=None):
+    """Check if a status should be shown based on filter settings.
+
+    This is a standalone function so it can be used by both the dialog
+    and the timeline when new posts come in.
+
+    Args:
+        status: The status to check
+        settings: Dict with filter settings (original, replies, threads, boosts, quotes, media, no_media)
+        app: Application instance for looking up parent posts (optional)
+
+    Returns:
+        True if the status should be shown, False otherwise
+    """
+    if not settings:
+        return True
+
+    if app is None:
+        app = get_app()
+
+    def get_post_for_check(s):
+        """Get the actual post to check (unwrap boosts for content checks)."""
+        if hasattr(s, 'reblog') and s.reblog:
+            return s.reblog
+        return s
+
+    def is_boost(s):
+        return hasattr(s, 'reblog') and s.reblog is not None
+
+    def is_quote(s):
+        post = get_post_for_check(s)
+        return hasattr(post, 'quote') and post.quote is not None
+
+    def has_media(s):
+        post = get_post_for_check(s)
+        attachments = getattr(post, 'media_attachments', None)
+        return attachments is not None and len(attachments) > 0
+
+    def is_reply_to_id(s):
+        post = get_post_for_check(s)
+        return hasattr(post, 'in_reply_to_id') and post.in_reply_to_id is not None
+
+    def is_thread(s):
+        """Check if status is a self-reply (thread continuation)."""
+        post = get_post_for_check(s)
+        if not hasattr(post, 'in_reply_to_id') or post.in_reply_to_id is None:
+            return False
+
+        # Get author of this post
+        post_author = getattr(post, 'account', None)
+        if not post_author:
+            return False
+        post_acct = getattr(post_author, 'acct', '') or getattr(post_author, 'id', '')
+
+        # Try to find parent post to check author
+        if app and app.currentAccount:
+            parent = app.lookup_status(app.currentAccount, post.in_reply_to_id)
+            if parent:
+                parent_author = getattr(parent, 'account', None)
+                if parent_author:
+                    parent_acct = getattr(parent_author, 'acct', '') or getattr(parent_author, 'id', '')
+                    return post_acct.lower() == parent_acct.lower()
+
+        return False
+
+    def is_reply(s):
+        """Check if status is a reply to someone else (not self)."""
+        if not is_reply_to_id(s):
+            return False
+        return not is_thread(s)
+
+    def is_original(s):
+        """Check if status is an original post (not reply, not boost)."""
+        if is_boost(s):
+            return False
+        return not is_reply_to_id(s)
+
+    # Now apply filters
+    _is_boost = is_boost(status)
+    _is_quote = is_quote(status)
+    _is_thread = is_thread(status)
+    _is_reply = is_reply(status)
+    _is_original = is_original(status)
+    _has_media = has_media(status)
+
+    # Check boost filter
+    if _is_boost and not settings.get('boosts', True):
+        return False
+
+    # Check quote filter
+    if _is_quote and not settings.get('quotes', True):
+        return False
+
+    # Check thread filter (self-replies)
+    if _is_thread and not settings.get('threads', True):
+        return False
+
+    # Check reply filter (replies to others)
+    if _is_reply and not settings.get('replies', True):
+        return False
+
+    # Check original post filter
+    if _is_original and not _is_boost and not settings.get('original', True):
+        return False
+
+    # Check media filters
+    if _has_media and not settings.get('media', True):
+        return False
+    if not _has_media and not settings.get('no_media', True):
+        return False
+
+    return True
+
+
 class TimelineFilterDialog(wx.Dialog):
     """Dialog for filtering the current timeline by post type."""
 
@@ -12,9 +126,9 @@ class TimelineFilterDialog(wx.Dialog):
         self.timeline = timeline
         self.app = get_app()
 
-        # Store original statuses if not already stored
-        if not hasattr(timeline, '_unfiltered_statuses'):
-            timeline._unfiltered_statuses = list(timeline.statuses)
+        # Sync unfiltered statuses with current statuses
+        # This handles new posts that came in since filter was last applied
+        self._sync_unfiltered_statuses()
 
         panel = wx.Panel(self)
         main_box = wx.BoxSizer(wx.VERTICAL)
@@ -82,71 +196,25 @@ class TimelineFilterDialog(wx.Dialog):
         panel.SetSizer(main_box)
         panel.Layout()
 
-    def _get_post_for_check(self, status):
-        """Get the actual post to check (unwrap boosts for content checks)."""
-        if hasattr(status, 'reblog') and status.reblog:
-            return status.reblog
-        return status
-
-    def _is_boost(self, status):
-        """Check if status is a boost/repost."""
-        return hasattr(status, 'reblog') and status.reblog is not None
-
-    def _is_quote(self, status):
-        """Check if status is a quote post."""
-        post = self._get_post_for_check(status)
-        return hasattr(post, 'quote') and post.quote is not None
-
-    def _is_reply(self, status):
-        """Check if status is a reply to someone else."""
-        post = self._get_post_for_check(status)
-        if not hasattr(post, 'in_reply_to_id') or post.in_reply_to_id is None:
-            return False
-        # Check if it's a self-reply (thread) or reply to others
-        # For self-reply detection, we need to check if replying to own post
-        return not self._is_thread(status)
-
-    def _is_thread(self, status):
-        """Check if status is a self-reply (thread continuation)."""
-        post = self._get_post_for_check(status)
-        if not hasattr(post, 'in_reply_to_id') or post.in_reply_to_id is None:
-            return False
-
-        # Get author of this post
-        post_author = getattr(post, 'account', None)
-        if not post_author:
-            return False
-        post_acct = getattr(post_author, 'acct', '') or getattr(post_author, 'id', '')
-
-        # Try to find parent post to check author
-        parent = self.app.lookup_status(self.app.currentAccount, post.in_reply_to_id)
-        if parent:
-            parent_author = getattr(parent, 'account', None)
-            if parent_author:
-                parent_acct = getattr(parent_author, 'acct', '') or getattr(parent_author, 'id', '')
-                return post_acct.lower() == parent_acct.lower()
-
-        # If we can't find parent, check if text starts with own handle (common pattern)
-        return False
-
-    def _has_media(self, status):
-        """Check if status has media attachments."""
-        post = self._get_post_for_check(status)
-        attachments = getattr(post, 'media_attachments', None)
-        return attachments is not None and len(attachments) > 0
-
-    def _is_original(self, status):
-        """Check if status is an original post (not reply, not boost)."""
-        if self._is_boost(status):
-            return False
-        post = self._get_post_for_check(status)
-        return not hasattr(post, 'in_reply_to_id') or post.in_reply_to_id is None
+    def _sync_unfiltered_statuses(self):
+        """Sync _unfiltered_statuses with any new posts that came in."""
+        if not hasattr(self.timeline, '_unfiltered_statuses'):
+            # First time - store current statuses as unfiltered
+            self.timeline._unfiltered_statuses = list(self.timeline.statuses)
+        else:
+            # Merge: add any statuses in current list that aren't in unfiltered
+            unfiltered_ids = {getattr(s, 'id', None) for s in self.timeline._unfiltered_statuses}
+            for status in self.timeline.statuses:
+                status_id = getattr(status, 'id', None)
+                if status_id and status_id not in unfiltered_ids:
+                    self.timeline._unfiltered_statuses.append(status)
+                    unfiltered_ids.add(status_id)
 
     def on_apply(self, event):
         """Apply the filter to the timeline."""
         from . import main as main_window
 
-        # Save filter settings
+        # Save filter settings to timeline
         self.timeline._filter_settings = {
             'original': self.show_original.GetValue(),
             'replies': self.show_replies.GetValue(),
@@ -157,10 +225,10 @@ class TimelineFilterDialog(wx.Dialog):
             'no_media': self.show_no_media.GetValue(),
         }
 
-        # Filter statuses
+        # Filter statuses from the unfiltered list
         filtered = []
         for status in self.timeline._unfiltered_statuses:
-            if self._should_show(status):
+            if should_show_status(status, self.timeline._filter_settings, self.app):
                 filtered.append(status)
 
         self.timeline.statuses = filtered
@@ -171,52 +239,17 @@ class TimelineFilterDialog(wx.Dialog):
 
         self.Destroy()
 
-    def _should_show(self, status):
-        """Determine if a status should be shown based on filter settings."""
-        is_boost = self._is_boost(status)
-        is_quote = self._is_quote(status)
-        is_thread = self._is_thread(status)
-        is_reply = self._is_reply(status)
-        is_original = self._is_original(status)
-        has_media = self._has_media(status)
-
-        # Check boost filter
-        if is_boost and not self.show_boosts.GetValue():
-            return False
-
-        # Check quote filter
-        if is_quote and not self.show_quotes.GetValue():
-            return False
-
-        # Check thread filter (self-replies)
-        if is_thread and not self.show_threads.GetValue():
-            return False
-
-        # Check reply filter (replies to others)
-        if is_reply and not self.show_replies.GetValue():
-            return False
-
-        # Check original post filter
-        if is_original and not is_boost and not self.show_original.GetValue():
-            return False
-
-        # Check media filters
-        if has_media and not self.show_media.GetValue():
-            return False
-        if not has_media and not self.show_no_media.GetValue():
-            return False
-
-        return True
-
     def on_clear(self, event):
         """Clear the filter and restore all posts."""
         from . import main as main_window
 
         if hasattr(self.timeline, '_unfiltered_statuses'):
             self.timeline.statuses = list(self.timeline._unfiltered_statuses)
-            self.timeline._is_filtered = False
-            if hasattr(self.timeline, '_filter_settings'):
-                del self.timeline._filter_settings
+            del self.timeline._unfiltered_statuses
+
+        self.timeline._is_filtered = False
+        if hasattr(self.timeline, '_filter_settings'):
+            del self.timeline._filter_settings
 
         main_window.window.refreshList()
         self.Destroy()

@@ -204,6 +204,37 @@ class timeline(object):
 			return
 		speak.speak(pref + ", ".join(self.prepare(items)))
 
+	def _add_status_with_filter(self, status, to_front=False):
+		"""Add a status to the timeline, respecting any active filter.
+
+		Args:
+			status: The status to add
+			to_front: If True, insert at front of list; if False, append to end
+
+		Returns:
+			True if the status was added to the visible list, False if filtered out
+		"""
+		from GUI.timeline_filter import should_show_status
+
+		# Always add to unfiltered list if it exists
+		if hasattr(self, '_unfiltered_statuses'):
+			if to_front:
+				self._unfiltered_statuses.insert(0, status)
+			else:
+				self._unfiltered_statuses.append(status)
+
+		# Check if we should show this status based on filter
+		if hasattr(self, '_filter_settings') and self._filter_settings:
+			if not should_show_status(status, self._filter_settings, self.app):
+				return False
+
+		# Add to visible statuses
+		if to_front:
+			self.statuses.insert(0, status)
+		else:
+			self.statuses.append(status)
+		return True
+
 	def load_conversation(self):
 		status = self.status
 
@@ -498,16 +529,23 @@ class timeline(object):
 				else:
 					self.account.user_cache.add_users_from_status(i)
 
-				if not self.app.isDuplicate(i, self.statuses):
+				# Check for duplicates in both visible and unfiltered statuses
+				all_statuses = self.statuses
+				if hasattr(self, '_unfiltered_statuses'):
+					all_statuses = self._unfiltered_statuses
+				if not self.app.isDuplicate(i, all_statuses):
 					newitems += 1
+					# Use filter-aware method to add status
+					to_front = self.app.prefs.reversed if (self.initial or back) else not self.app.prefs.reversed
 					if self.initial or back:
-						if not self.app.prefs.reversed:
-							self.statuses.append(i)
-							objs2.append(i)
-						else:
-							self.statuses.insert(0, i)
-							objs2.insert(0, i)
+						shown = self._add_status_with_filter(i, to_front=self.app.prefs.reversed)
+						if shown:
+							if not self.app.prefs.reversed:
+								objs2.append(i)
+							else:
+								objs2.insert(0, i)
 					else:
+						# For new items, collect first, then add
 						if not self.app.prefs.reversed:
 							objs.append(i)
 							objs2.append(i)
@@ -524,11 +562,13 @@ class timeline(object):
 					if not self.app.prefs.reversed:
 						objs.reverse()
 						objs2.reverse()
+					# Filter objs2 to only include items that pass the filter
+					filtered_objs2 = []
 					for i in objs:
-						if not self.app.prefs.reversed:
-							self.statuses.insert(0, i)
-						else:
-							self.statuses.append(i)
+						shown = self._add_status_with_filter(i, to_front=not self.app.prefs.reversed)
+						if shown:
+							filtered_objs2.append(i)
+					objs2 = filtered_objs2
 
 				if self.app.currentAccount == self.account and self.account.currentTimeline == self:
 					if not back and not self.initial:

@@ -399,7 +399,8 @@ class mastodon(object):
 		"""Finish timeline initialization (common to all platforms)."""
 		import wx
 		if self.app.currentAccount == self:
-			# Use CallAfter for thread safety
+			# Use CallAfter for thread safety - must refresh timeline list before selecting
+			wx.CallAfter(main.window.refreshTimelines)
 			wx.CallAfter(main.window.list.SetSelection, 0)
 			wx.CallAfter(main.window.on_list_change, None)
 		# Track pending initial loads - streaming starts after all complete

@@ -16,6 +16,7 @@ import threading
 class MainGui(wx.Frame):
 	def __init__(self, title):
 		self.invisible=False
+		self._find_text = ""  # Current search text for find in timeline
 		wx.Frame.__init__(self, None, title=title,size=(800,600))
 		self.Center()
 		if platform.system()!="Darwin":
@@ -135,6 +136,8 @@ class MainGui(wx.Frame):
 		self.Bind(wx.EVT_MENU, self.OnSearch, m_search)
 		m_user_search = menu3.Append(-1, "User Search\tCtrl+Shift+/", "search")
 		self.Bind(wx.EVT_MENU, self.OnUserSearch, m_user_search)
+		m_find = menu3.Append(-1, "Find in timeline\tF3", "find")
+		self.Bind(wx.EVT_MENU, self.OnFind, m_find)
 		self.m_close_timeline = menu3.Append(-1, "Close timeline\tCtrl+W", "removetimeline")
 		self.m_close_timeline.Enable(False)
 		self.Bind(wx.EVT_MENU, self.OnCloseTimeline, self.m_close_timeline)
@@ -570,6 +573,53 @@ class MainGui(wx.Frame):
 	def OnUserSearch(self, event=None):
 		s=search.SearchGui(get_app().currentAccount,"user")
 		s.Show()
+
+	def OnFind(self, event=None):
+		"""Find text in the current timeline."""
+		tl = get_app().currentAccount.currentTimeline
+		if not tl.statuses:
+			speak.speak("No posts to search")
+			return
+
+		# Show dialog to get search text
+		dlg = wx.TextEntryDialog(self, "Enter text to find:", "Find in Timeline", self._find_text)
+		if dlg.ShowModal() != wx.ID_OK:
+			dlg.Destroy()
+			return
+
+		search_text = dlg.GetString().strip().lower()
+		dlg.Destroy()
+
+		if not search_text:
+			speak.speak("No search text entered")
+			return
+
+		# If search text changed, start from beginning; otherwise continue from current position
+		if search_text != self._find_text:
+			start_index = 0
+		else:
+			start_index = tl.index + 1
+
+		self._find_text = search_text
+
+		# Get displayed text for each post
+		displayed = tl.get()
+
+		# Search from start_index, wrapping around
+		found = False
+		for offset in range(len(displayed)):
+			idx = (start_index + offset) % len(displayed)
+			if search_text in displayed[idx].lower():
+				# Found a match
+				tl.index = idx
+				self.list2.SetSelection(idx)
+				self.on_list2_change(None)
+				speak.speak(displayed[idx])
+				found = True
+				break
+
+		if not found:
+			speak.speak(f"Not found: {self._find_text}")
 
 	def OnLists(self, event=None):
 		s=lists.ListsGui(get_app().currentAccount)

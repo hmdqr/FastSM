@@ -213,10 +213,15 @@ class mastodon(object):
 
 		# Create default timelines for Mastodon
 		_log("Creating default timelines...")
+		_log("  Adding Home...")
 		timeline.add(self, "Home", "home")
+		_log("  Adding Notifications...")
 		timeline.add(self, "Notifications", "notifications")
+		_log("  Adding Mentions...")
 		timeline.add(self, "Mentions", "mentions")
+		_log("  Adding Conversations...")
 		timeline.add(self, "Conversations", "conversations")
+		_log("  Adding Sent...")
 		timeline.add(self, "Sent", "user", self.me.acct, self.me)
 		_log("Default timelines created, restoring saved timelines...")
 
@@ -318,6 +323,8 @@ class mastodon(object):
 
 	def _init_bluesky(self, index):
 		"""Initialize Bluesky account."""
+		_log = self._log
+		_log("Initializing Bluesky...")
 		from atproto import Client
 		from atproto.exceptions import AtProtocolError
 		from platforms.bluesky import BlueskyAccount, bluesky_profile_to_universal
@@ -337,9 +344,11 @@ class mastodon(object):
 			self.prefs.bluesky_service = creds['service_url']
 
 		# Initialize the client and login
+		_log("Logging into Bluesky...")
 		try:
 			self.api = Client(base_url=self.prefs.bluesky_service)
 			raw_profile = self.api.login(self.prefs.bluesky_handle, self.prefs.bluesky_password)
+			_log("Login successful")
 			self.me = bluesky_profile_to_universal(raw_profile)
 		except AtProtocolError as e:
 			speak.speak("Error logging into Bluesky: " + str(e))
@@ -356,16 +365,20 @@ class mastodon(object):
 		self.default_visibility = 'public'  # Bluesky only has public posts
 
 		# Initialize platform backend (pass raw profile, it converts internally)
+		_log("Initializing platform backend...")
 		self._platform = BlueskyAccount(self.app, index, self.api, raw_profile, self.confpath)
+		_log("Platform backend initialized")
 
 		self._finish_init(index)
 
 		# Create default timelines for Bluesky (no conversations, lists)
+		_log("Creating default timelines...")
 		timeline.add(self, "Home", "home")
 		timeline.add(self, "Notifications", "notifications")
 		timeline.add(self, "Mentions", "mentions")
 		# No conversations - Bluesky doesn't support DMs
 		timeline.add(self, "Sent", "user", self.me.acct, self.me)
+		_log("Default timelines created")
 
 		# Restore saved user timelines and searches (no lists for Bluesky)
 		# Avoid API calls during startup for speed
@@ -412,7 +425,9 @@ class mastodon(object):
 		self.stream_listener = None
 		self.stream = None
 
+		_log("Finishing timeline init...")
 		self._finish_timeline_init()
+		_log("Account initialization complete")
 
 	def _finish_init(self, index):
 		"""Common initialization after platform-specific setup."""

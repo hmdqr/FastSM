@@ -183,13 +183,6 @@ class timeline(object):
 		else:
 			self.load_conversation()
 
-		if self.type == "conversations" and not self.hide:
-			# Only load message cache if platform supports DMs
-			m = self.app.load_messages(self.account)
-			if m is not None:
-				self.statuses = m
-				self.initial = False
-
 	def _load_remote_user(self, **kwargs):
 		"""Helper to load remote user timeline"""
 		if hasattr(self.account, '_platform') and self.account._platform:
@@ -634,8 +627,6 @@ class timeline(object):
 				# Notify account that this timeline's initial load is complete
 				if hasattr(self.account, '_on_timeline_initial_load_complete'):
 					self.account._on_timeline_initial_load_complete()
-		if self.type == "conversations":
-			self.app.save_messages(self.account, self.statuses)
 		if self == self.account.timelines[len(self.account.timelines) - 1] and not self.account.ready:
 			self.account.ready = True
 			sound.play(self.account, "ready")

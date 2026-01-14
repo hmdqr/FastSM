@@ -292,22 +292,6 @@ class Application:
 		except:
 			pass
 
-	def save_messages(self, account, messages):
-		"""Save messages cache for an account."""
-		f = open(account.confpath + "/messagecache", "wb")
-		f.write(pickle.dumps(messages))
-		f.close()
-
-	def load_messages(self, account):
-		"""Load messages cache for an account."""
-		try:
-			f = open(account.confpath + "/messagecache", "rb")
-			messages = pickle.loads(f.read())
-			f.close()
-			return messages
-		except:
-			return None
-
 	def save_timeline_settings(self):
 		"""Save timeline settings to disk."""
 		f = open(self.confpath + "/timelinecache", "wb")

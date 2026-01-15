@@ -311,6 +311,22 @@ class UserViewGui(wx.Dialog):
 		self.unfollow.Bind(wx.EVT_BUTTON, self.OnUnfollow)
 		self.main_box.Add(self.unfollow, 0, wx.ALL, 10)
 
+		self.mute = wx.Button(self.panel, -1, "M&ute")
+		self.mute.Bind(wx.EVT_BUTTON, self.OnMute)
+		self.main_box.Add(self.mute, 0, wx.ALL, 10)
+
+		self.unmute = wx.Button(self.panel, -1, "Un&mute")
+		self.unmute.Bind(wx.EVT_BUTTON, self.OnUnmute)
+		self.main_box.Add(self.unmute, 0, wx.ALL, 10)
+
+		self.block = wx.Button(self.panel, -1, "&Block")
+		self.block.Bind(wx.EVT_BUTTON, self.OnBlock)
+		self.main_box.Add(self.block, 0, wx.ALL, 10)
+
+		self.unblock = wx.Button(self.panel, -1, "Unbloc&k")
+		self.unblock.Bind(wx.EVT_BUTTON, self.OnUnblock)
+		self.main_box.Add(self.unblock, 0, wx.ALL, 10)
+
 		self.message = wx.Button(self.panel, -1, "&Message")
 		self.message.Bind(wx.EVT_BUTTON, self.OnMessage)
 		self.main_box.Add(self.message, 0, wx.ALL, 10)
@@ -333,6 +349,10 @@ class UserViewGui(wx.Dialog):
 
 		self.follow.Enable(False)
 		self.unfollow.Enable(False)
+		self.mute.Enable(False)
+		self.unmute.Enable(False)
+		self.block.Enable(False)
+		self.unblock.Enable(False)
 		self.timeline.Enable(False)
 		self.message.Enable(False)
 
@@ -373,15 +393,36 @@ class UserViewGui(wx.Dialog):
 			if relationships and len(relationships) > 0:
 				rel = relationships[0]
 				following = getattr(rel, 'following', False)
+				muting = getattr(rel, 'muting', False)
+				blocking = getattr(rel, 'blocking', False)
+
 				if following:
 					self.unfollow.Enable(True)
 					self.follow.Enable(False)
 				else:
 					self.unfollow.Enable(False)
 					self.follow.Enable(True)
+
+				if muting:
+					self.unmute.Enable(True)
+					self.mute.Enable(False)
+				else:
+					self.unmute.Enable(False)
+					self.mute.Enable(True)
+
+				if blocking:
+					self.unblock.Enable(True)
+					self.block.Enable(False)
+				else:
+					self.unblock.Enable(False)
+					self.block.Enable(True)
 		except:
 			self.follow.Enable(True)
 			self.unfollow.Enable(True)
+			self.mute.Enable(True)
+			self.unmute.Enable(True)
+			self.block.Enable(True)
+			self.unblock.Enable(True)
 
 		self.message.Enable(True)
 		self.timeline.Enable(True)
@@ -432,6 +473,26 @@ class UserViewGui(wx.Dialog):
 	def OnUnfollow(self, event):
 		user = self.users[self.index]
 		misc.unfollow_user(self.account, user.acct)
+
+	def OnMute(self, event):
+		user = self.users[self.index]
+		misc.mute_user(self.account, user.id)
+		self.on_list_change(None)
+
+	def OnUnmute(self, event):
+		user = self.users[self.index]
+		misc.unmute_user(self.account, user.id)
+		self.on_list_change(None)
+
+	def OnBlock(self, event):
+		user = self.users[self.index]
+		misc.block_user(self.account, user.id)
+		self.on_list_change(None)
+
+	def OnUnblock(self, event):
+		user = self.users[self.index]
+		misc.unblock_user(self.account, user.id)
+		self.on_list_change(None)
 
 	def OnFollowKey(self, event):
 		"""Follow user via keyboard shortcut."""

@@ -100,6 +100,46 @@ def unfollow_user(account, username):
 		account.app.handle_error(error, "Unfollow " + username)
 
 
+def mute_user(account, user_id):
+	"""Mute a user by ID."""
+	try:
+		account.mute(user_id)
+		sound.play(account, "mute")
+		speak.speak("Muted")
+	except Exception as error:
+		account.app.handle_error(error, "Mute user")
+
+
+def unmute_user(account, user_id):
+	"""Unmute a user by ID."""
+	try:
+		account.unmute(user_id)
+		sound.play(account, "unmute")
+		speak.speak("Unmuted")
+	except Exception as error:
+		account.app.handle_error(error, "Unmute user")
+
+
+def block_user(account, user_id):
+	"""Block a user by ID."""
+	try:
+		account.block(user_id)
+		sound.play(account, "block")
+		speak.speak("Blocked")
+	except Exception as error:
+		account.app.handle_error(error, "Block user")
+
+
+def unblock_user(account, user_id):
+	"""Unblock a user by ID."""
+	try:
+		account.unblock(user_id)
+		sound.play(account, "unblock")
+		speak.speak("Unblocked")
+	except Exception as error:
+		account.app.handle_error(error, "Unblock user")
+
+
 def block(account, status):
 	u = account.app.get_user_objects_in_status(account, status)
 	u2 = []

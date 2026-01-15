@@ -392,11 +392,23 @@ def havent_posted(account):
 def blocked_users(account):
 	"""List users you have blocked."""
 	try:
-		blocked = list(account.api.blocks(limit=80))
-		if not blocked:
+		platform_type = getattr(account.prefs, 'platform_type', 'mastodon')
+		if platform_type == 'bluesky':
+			# Bluesky API
+			response = account.api.app.bsky.graph.get_blocks()
+			blocked = response.blocks if hasattr(response, 'blocks') else []
+			# Convert to user-like objects
+			users = []
+			for block in blocked:
+				users.append(block)
+		else:
+			# Mastodon API
+			blocked = list(account.api.blocks(limit=80))
+			users = blocked
+		if not users:
 			speak.speak("No blocked users")
 			return
-		flw = view.UserViewGui(account, blocked, "Blocked users")
+		flw = view.UserViewGui(account, users, "Blocked users")
 		flw.Show()
 	except Exception as error:
 		account.app.handle_error(error, "Get blocked users")
@@ -405,11 +417,22 @@ def blocked_users(account):
 def muted_users(account):
 	"""List users you have muted."""
 	try:
-		muted = list(account.api.mutes(limit=80))
-		if not muted:
+		platform_type = getattr(account.prefs, 'platform_type', 'mastodon')
+		if platform_type == 'bluesky':
+			# Bluesky API
+			response = account.api.app.bsky.graph.get_mutes()
+			muted = response.mutes if hasattr(response, 'mutes') else []
+			users = []
+			for mute in muted:
+				users.append(mute)
+		else:
+			# Mastodon API
+			muted = list(account.api.mutes(limit=80))
+			users = muted
+		if not users:
 			speak.speak("No muted users")
 			return
-		flw = view.UserViewGui(account, muted, "Muted users")
+		flw = view.UserViewGui(account, users, "Muted users")
 		flw.Show()
 	except Exception as error:
 		account.app.handle_error(error, "Get muted users")

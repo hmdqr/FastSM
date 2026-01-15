@@ -278,9 +278,10 @@ class MainGui(wx.Frame):
 		get_app().currentAccount.currentTimeline.toggle_mute()
 
 	def OnListCharHook(self, event):
-		"""Handle char hook for Option+M on Mac."""
+		"""Handle char hook for Ctrl+M on Mac (context menu)."""
 		key = event.GetKeyCode()
-		if event.AltDown() and not event.ControlDown() and not event.ShiftDown():
+		# Use Ctrl+M (actual Control key) for context menu on Mac
+		if event.RawControlDown() and not event.AltDown() and not event.ShiftDown():
 			if key == ord('M') or key == ord('m'):
 				self.OnPostContextMenu()
 				return  # Don't skip - consume the event

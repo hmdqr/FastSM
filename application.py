@@ -179,6 +179,8 @@ class Application:
 		self.prefs.wrap = self.prefs.get("wrap", False)
 		# Content warning handling: 'hide' = show CW only, 'show' = show CW + text, 'ignore' = show text only
 		self.prefs.cw_mode = self.prefs.get("cw_mode", "hide")
+		# Keymap for invisible interface (default inherits from default.keymap)
+		self.prefs.keymap = self.prefs.get("keymap", "default")
 
 		if self.prefs.invisible:
 			main.window.register_keys()
@@ -448,8 +450,8 @@ class Application:
 
 		if status:
 			status_text = self.strip_html(getattr(status, 'content', ''))
-			if len(status_text) > 100:
-				status_text = status_text[:100] + "..."
+			if len(status_text) > 280:
+				status_text = status_text[:280] + "..."
 			# Add poll info for notifications with polls
 			if hasattr(status, 'poll') and status.poll:
 				poll = status.poll

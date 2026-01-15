@@ -87,6 +87,29 @@ class templates(wx.Panel, wx.Dialog):
 		self.notificationTemplate.AppendText(get_app().prefs.notificationTemplate)
 
 class advanced(wx.Panel, wx.Dialog):
+	def _get_available_keymaps(self):
+		"""Get list of available keymaps from bundled and user config folders."""
+		keymaps = ['default']  # Always have default
+
+		# Check bundled keymaps folder
+		if os.path.exists("keymaps"):
+			for f in os.listdir("keymaps"):
+				if f.endswith(".keymap") and not f.startswith("."):
+					name = f[:-7]  # Remove .keymap extension
+					if name != "default" and name not in keymaps:
+						keymaps.append(name)
+
+		# Check user config keymaps folder
+		user_keymaps_path = os.path.join(get_app().confpath, "keymaps")
+		if os.path.exists(user_keymaps_path):
+			for f in os.listdir(user_keymaps_path):
+				if f.endswith(".keymap") and not f.startswith("."):
+					name = f[:-7]  # Remove .keymap extension
+					if name != "default" and name not in keymaps:
+						keymaps.append(name)
+
+		return keymaps
+
 	def __init__(self, parent):
 		super(advanced, self).__init__(parent)
 		self.main_box = wx.BoxSizer(wx.VERTICAL)
@@ -100,6 +123,18 @@ class advanced(wx.Panel, wx.Dialog):
 			self.repeat=wx.CheckBox(self, -1, "Repeat items at edges of invisible interface")
 			self.main_box.Add(self.repeat, 0, wx.ALL, 10)
 			self.repeat.SetValue(get_app().prefs.repeat)
+
+			# Keymap selection
+			keymap_label = wx.StaticText(self, -1, "Keymap:")
+			self.main_box.Add(keymap_label, 0, wx.LEFT | wx.TOP, 10)
+			self.keymaps = self._get_available_keymaps()
+			self.keymap_choice = wx.Choice(self, -1, choices=self.keymaps)
+			current_keymap = get_app().prefs.keymap
+			if current_keymap in self.keymaps:
+				self.keymap_choice.SetSelection(self.keymaps.index(current_keymap))
+			else:
+				self.keymap_choice.SetSelection(0)
+			self.main_box.Add(self.keymap_choice, 0, wx.ALL, 10)
 		self.position=wx.CheckBox(self, -1, "Speak position information when navigating between timelines of invisible interface and switching timelines")
 		self.main_box.Add(self.position, 0, wx.ALL, 10)
 		self.position.SetValue(get_app().prefs.position)
@@ -159,10 +194,20 @@ class OptionsGui(wx.Dialog):
 			get_app().prefs.invisible_sync=self.advanced.invisible_sync.GetValue()
 			get_app().prefs.repeat=self.advanced.repeat.GetValue()
 			get_app().prefs.invisible_sync=self.advanced.invisible_sync.GetValue()
+
+			# Handle keymap change - re-register if keymap changed while invisible interface is enabled
+			new_keymap = self.advanced.keymaps[self.advanced.keymap_choice.GetSelection()]
+			keymap_changed = get_app().prefs.keymap != new_keymap
+			get_app().prefs.keymap = new_keymap
+
 			if get_app().prefs.invisible and not main.window.invisible:
 				main.window.register_keys()
-			if not get_app().prefs.invisible and main.window.invisible:
+			elif not get_app().prefs.invisible and main.window.invisible:
 				main.window.unregister_keys()
+			elif keymap_changed and main.window.invisible:
+				# Re-register with new keymap
+				main.window.unregister_keys()
+				main.window.register_keys()
 		get_app().prefs.streaming=self.advanced.streaming.GetValue()
 		get_app().prefs.load_all_previous=self.advanced.load_all_previous.GetValue()
 		get_app().prefs.position=self.advanced.position.GetValue()

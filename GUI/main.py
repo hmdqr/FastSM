@@ -217,38 +217,94 @@ class MainGui(wx.Frame):
 			self.list.Bind(wx.EVT_CHAR_HOOK, self.OnListCharHook)
 		self.panel.Layout()
 
+	def _load_keymap_with_inheritance(self):
+		"""Load keymap with inheritance from default.
+
+		Returns dict of key -> action mappings.
+		First loads default keymap, then overlays any custom keymap selected by user.
+		"""
+		keymap = {}
+
+		# Load default keymap first
+		default_paths = [
+			"keymaps/default.keymap",  # Local dev or bundled
+			os.path.join(get_app().confpath, "keymaps/default.keymap"),  # User config
+		]
+
+		# Fallback to legacy keymap.keymap for backwards compatibility
+		default_paths.append("keymap.keymap")
+
+		for path in default_paths:
+			if os.path.exists(path):
+				try:
+					with open(path, "r") as f:
+						for line in f:
+							line = line.strip()
+							if "=" in line:
+								parts = line.split("=", 1)
+								if len(parts) == 2:
+									keymap[parts[0].strip()] = parts[1].strip()
+					break
+				except:
+					pass
+
+		# Load custom keymap if selected (overlays defaults)
+		custom_keymap = getattr(get_app().prefs, 'keymap', 'default')
+		if custom_keymap and custom_keymap != 'default':
+			# Check user config keymaps folder first
+			custom_paths = [
+				os.path.join(get_app().confpath, f"keymaps/{custom_keymap}.keymap"),
+				f"keymaps/{custom_keymap}.keymap",  # Bundled custom keymaps
+			]
+
+			for path in custom_paths:
+				if os.path.exists(path):
+					try:
+						with open(path, "r") as f:
+							for line in f:
+								line = line.strip()
+								if "=" in line:
+									parts = line.split("=", 1)
+									if len(parts) == 2:
+										keymap[parts[0].strip()] = parts[1].strip()
+						break
+					except:
+						pass
+
+		return keymap
+
 	def register_keys(self):
 		# Invisible hotkeys not supported on Mac
 		if platform.system() == "Darwin":
 			self.invisible = False
 			return
 		self.invisible=True
-		f=open("keymap.keymap","r")
-		keys=f.read().split("\n")
-		f.close()
-		for i in keys:
-			key=i.strip(" ").split("=")
-			success=invisible.register_key(key[0],key[1])
+		keymap = self._load_keymap_with_inheritance()
+		for key, action in keymap.items():
+			success=invisible.register_key(key, action)
 
 	def unregister_keys(self):
 		# Invisible hotkeys not supported on Mac
 		if platform.system() == "Darwin":
 			return
 		self.invisible=False
-		f=open("keymap.keymap","r")
-		keys=f.read().split("\n")
-		f.close()
-		for i in keys:
-			key=i.split("=")
-			success=invisible.register_key(key[0],key[1],False)
+		keymap = self._load_keymap_with_inheritance()
+		for key, action in keymap.items():
+			success=invisible.register_key(key, action, False)
 
 	def get_current_status(self):
-		"""Get the current status, handling conversation objects properly"""
+		"""Get the current status, handling conversation and notification objects properly"""
 		item = get_app().currentAccount.currentTimeline.statuses[get_app().currentAccount.currentTimeline.index]
 		if get_app().currentAccount.currentTimeline.type == "conversations":
 			# Conversations have last_status instead of being a status directly
 			if hasattr(item, 'last_status') and item.last_status:
 				return item.last_status
+			return None
+		if get_app().currentAccount.currentTimeline.type == "notifications":
+			# Notifications have status attribute for the associated post
+			if hasattr(item, 'status') and item.status:
+				return item.status
+			# For follow notifications etc. without a status, return None
 			return None
 		return item
 
@@ -271,7 +327,7 @@ class MainGui(wx.Frame):
 				self.on_list2_change(None)
 
 	def OnReadme(self,event=None):
-		webbrowser.open("https://github.com/masonasons/FastSM/blob/main/README.md")
+		webbrowser.open("https://github.com/masonasons/FastSM/blob/master/docs/FastSM.md")
 
 	def OnRead(self,event=None):
 		get_app().currentAccount.currentTimeline.toggle_read()
@@ -680,6 +736,8 @@ class MainGui(wx.Frame):
 				is_following = False
 				is_muting = False
 				is_blocking = False
+				is_showing_reblogs = True
+				platform_type = getattr(get_app().currentAccount.prefs, 'platform_type', 'mastodon')
 				try:
 					if hasattr(item, 'account'):
 						account = get_app().currentAccount
@@ -689,11 +747,17 @@ class MainGui(wx.Frame):
 							is_following = getattr(rel, 'following', False)
 							is_muting = getattr(rel, 'muting', False)
 							is_blocking = getattr(rel, 'blocking', False)
+							is_showing_reblogs = getattr(rel, 'showing_reblogs', True)
 				except:
 					pass
 
 				m_follow = menu.Append(-1, "Unfollow" if is_following else "Follow")
 				self.Bind(wx.EVT_MENU, self.OnFollowToggle, m_follow)
+
+				# Hide boosts option - only for Mastodon and if following
+				if platform_type == 'mastodon' and is_following:
+					m_hide_boosts = menu.Append(-1, "Show boosts" if not is_showing_reblogs else "Hide boosts")
+					self.Bind(wx.EVT_MENU, self.OnHideBoostsToggle, m_hide_boosts)
 
 				m_mute = menu.Append(-1, "Unmute user" if is_muting else "Mute user")
 				self.Bind(wx.EVT_MENU, self.OnMuteToggle, m_mute)
@@ -765,6 +829,7 @@ class MainGui(wx.Frame):
 				is_following = False
 				is_muting = False
 				is_blocking = False
+				is_showing_reblogs = True
 				try:
 					user_id = item.account.id if hasattr(item, 'account') else (notif_status.account.id if notif_status else None)
 					if user_id:
@@ -775,11 +840,17 @@ class MainGui(wx.Frame):
 							is_following = getattr(rel, 'following', False)
 							is_muting = getattr(rel, 'muting', False)
 							is_blocking = getattr(rel, 'blocking', False)
+							is_showing_reblogs = getattr(rel, 'showing_reblogs', True)
 				except:
 					pass
 
 				m_follow = menu.Append(-1, "Unfollow" if is_following else "Follow")
 				self.Bind(wx.EVT_MENU, self.OnFollowToggle, m_follow)
+
+				# Hide boosts option - only for Mastodon and if following
+				if platform_type == 'mastodon' and is_following:
+					m_hide_boosts = menu.Append(-1, "Show boosts" if not is_showing_reblogs else "Hide boosts")
+					self.Bind(wx.EVT_MENU, self.OnHideBoostsToggle, m_hide_boosts)
 
 				m_mute = menu.Append(-1, "Unmute user" if is_muting else "Mute user")
 				self.Bind(wx.EVT_MENU, self.OnMuteToggle, m_mute)
@@ -854,6 +925,7 @@ class MainGui(wx.Frame):
 			is_following = False
 			is_muting = False
 			is_blocking = False
+			is_showing_reblogs = True
 			try:
 				user_id = status_to_check.account.id
 				account = get_app().currentAccount
@@ -863,11 +935,17 @@ class MainGui(wx.Frame):
 					is_following = getattr(rel, 'following', False)
 					is_muting = getattr(rel, 'muting', False)
 					is_blocking = getattr(rel, 'blocking', False)
+					is_showing_reblogs = getattr(rel, 'showing_reblogs', True)
 			except:
 				pass
 
 			m_follow = menu.Append(-1, "Unfollow" if is_following else "Follow")
 			self.Bind(wx.EVT_MENU, self.OnFollowToggle, m_follow)
+
+			# Hide boosts option - only for Mastodon and if following
+			if platform_type == 'mastodon' and is_following:
+				m_hide_boosts = menu.Append(-1, "Show boosts" if not is_showing_reblogs else "Hide boosts")
+				self.Bind(wx.EVT_MENU, self.OnHideBoostsToggle, m_hide_boosts)
 
 			m_mute = menu.Append(-1, "Unmute user" if is_muting else "Mute user")
 			self.Bind(wx.EVT_MENU, self.OnMuteToggle, m_mute)
@@ -1340,6 +1418,36 @@ class MainGui(wx.Frame):
 				speak.speak(f"Followed {user.acct}")
 		except Exception as error:
 			account.app.handle_error(error, "toggle follow")
+
+	def OnHideBoostsToggle(self, event=None):
+		"""Toggle whether to show/hide boosts from a user (Mastodon only)."""
+		status = self.get_current_status()
+		if not status:
+			return
+		account = get_app().currentAccount
+		# Get user
+		u = account.app.get_user_objects_in_status(account, status)
+		if not u:
+			speak.speak("No user found")
+			return
+		# If multiple users, use first one (the author)
+		user = u[0]
+		try:
+			# Check current relationship
+			relationships = account.api.account_relationships([user.id])
+			if relationships and len(relationships) > 0:
+				rel = relationships[0]
+				is_showing_reblogs = getattr(rel, 'showing_reblogs', True)
+				# Toggle reblogs visibility - use account_follow with reblogs parameter
+				account.api.account_follow(id=user.id, reblogs=not is_showing_reblogs)
+				if is_showing_reblogs:
+					speak.speak(f"Hiding boosts from {user.acct}")
+					sound.play(account, "mute")
+				else:
+					speak.speak(f"Showing boosts from {user.acct}")
+					sound.play(account, "unmute")
+		except Exception as error:
+			account.app.handle_error(error, "toggle boosts visibility")
 
 	def OnMuteToggle(self, event=None):
 		"""Toggle mute state for a user - checks relationship and mutes/unmutes accordingly."""

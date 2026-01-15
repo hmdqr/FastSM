@@ -81,7 +81,13 @@ import platform
 import os
 # On Windows, redirect stderr to errors.log in the app's directory (not cwd)
 if platform.system()!="Darwin":
-	app_dir = os.path.dirname(os.path.abspath(__file__))
+	# Handle both frozen (compiled) and source runs
+	if getattr(sys, 'frozen', False):
+		# Running as compiled executable
+		app_dir = os.path.dirname(sys.executable)
+	else:
+		# Running from source
+		app_dir = os.path.dirname(os.path.abspath(__file__))
 	f=open(os.path.join(app_dir, "errors.log"), "a")
 	sys.stderr=f
 import shutil

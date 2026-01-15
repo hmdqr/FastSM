@@ -46,6 +46,10 @@ class MainGui(wx.Frame):
 		self.Bind(wx.EVT_MENU, self.OnFollowers, m_followers)
 		m_following = menu.Append(-1, "List Following\tCtrl+]", "following")
 		self.Bind(wx.EVT_MENU, self.OnFollowing, m_following)
+		m_blocked = menu.Append(-1, "List Blocked Users", "blocked")
+		self.Bind(wx.EVT_MENU, self.OnBlockedUsers, m_blocked)
+		m_muted = menu.Append(-1, "List Muted Users", "muted")
+		self.Bind(wx.EVT_MENU, self.OnMutedUsers, m_muted)
 		m_options = menu.Append(wx.ID_PREFERENCES, "Global Options\tCtrl+,", "options")
 		self.Bind(wx.EVT_MENU, self.OnOptions, m_options)
 		m_account_options = menu.Append(-1, "Account options\tCtrl+Shift+,", "account_options")
@@ -489,6 +493,12 @@ class MainGui(wx.Frame):
 
 	def OnFollowing(self,event=None):
 		misc.following(get_app().currentAccount)
+
+	def OnBlockedUsers(self,event=None):
+		misc.blocked_users(get_app().currentAccount)
+
+	def OnMutedUsers(self,event=None):
+		misc.muted_users(get_app().currentAccount)
 
 	def OnMutualFollowing(self,event=None):
 		misc.mutual_following(get_app().currentAccount)

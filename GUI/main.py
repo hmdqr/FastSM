@@ -210,6 +210,9 @@ class MainGui(wx.Frame):
 		if platform.system() == "Darwin":
 			self.list2.Bind(wx.EVT_KEY_DOWN, self.OnListKeyDown)
 			self.list.Bind(wx.EVT_KEY_DOWN, self.OnListKeyDown)
+			# Use CHAR_HOOK for Option+M since it produces special characters
+			self.list2.Bind(wx.EVT_CHAR_HOOK, self.OnListCharHook)
+			self.list.Bind(wx.EVT_CHAR_HOOK, self.OnListCharHook)
 		self.panel.Layout()
 
 	def register_keys(self):
@@ -274,6 +277,15 @@ class MainGui(wx.Frame):
 	def OnMute(self,event=None):
 		get_app().currentAccount.currentTimeline.toggle_mute()
 
+	def OnListCharHook(self, event):
+		"""Handle char hook for Option+M on Mac."""
+		key = event.GetKeyCode()
+		if event.AltDown() and not event.ControlDown() and not event.ShiftDown():
+			if key == ord('M') or key == ord('m'):
+				self.OnPostContextMenu()
+				return  # Don't skip - consume the event
+		event.Skip()
+
 	def OnListKeyDown(self, event):
 		"""Handle key events for list controls on Mac."""
 		key = event.GetKeyCode()
@@ -291,13 +303,6 @@ class MainGui(wx.Frame):
 		elif key == wx.WXK_DELETE or key == wx.WXK_BACK:
 			if mods == 0:
 				self.OnDelete()
-			else:
-				event.Skip()
-		elif event.AltDown() and not event.ControlDown() and not event.ShiftDown():
-			# Option+letter on Mac - check raw key code for M
-			if key == ord('M') or key == ord('m') or event.GetUnicodeKey() in (ord('M'), ord('m'), 181, 0xb5):
-				# 181/0xb5 is µ (mu) which Option+M produces on Mac
-				self.OnPostContextMenu()
 			else:
 				event.Skip()
 		else:

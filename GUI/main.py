@@ -293,8 +293,13 @@ class MainGui(wx.Frame):
 				self.OnDelete()
 			else:
 				event.Skip()
-		elif key == ord('M') and mods == wx.MOD_ALT:
-			self.OnPostContextMenu()
+		elif event.AltDown() and not event.ControlDown() and not event.ShiftDown():
+			# Option+letter on Mac - check raw key code for M
+			if key == ord('M') or key == ord('m') or event.GetUnicodeKey() in (ord('M'), ord('m'), 181, 0xb5):
+				# 181/0xb5 is µ (mu) which Option+M produces on Mac
+				self.OnPostContextMenu()
+			else:
+				event.Skip()
 		else:
 			event.Skip()
 

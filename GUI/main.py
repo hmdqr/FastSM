@@ -205,6 +205,11 @@ class MainGui(wx.Frame):
 		self.main_box.Add(self.list2, 0, wx.ALL, 10)
 		self.list2.Bind(wx.EVT_LISTBOX, self.on_list2_change)
 		self.list2.Bind(wx.EVT_CONTEXT_MENU, self.OnPostContextMenu)
+		# On Mac, bind key events directly to list controls for shortcuts
+		# (menu accelerators are disabled on Mac to prevent firing in dialogs)
+		if platform.system() == "Darwin":
+			self.list2.Bind(wx.EVT_KEY_DOWN, self.OnListKeyDown)
+			self.list.Bind(wx.EVT_KEY_DOWN, self.OnListKeyDown)
 		self.panel.Layout()
 
 	def register_keys(self):
@@ -268,6 +273,30 @@ class MainGui(wx.Frame):
 
 	def OnMute(self,event=None):
 		get_app().currentAccount.currentTimeline.toggle_mute()
+
+	def OnListKeyDown(self, event):
+		"""Handle key events for list controls on Mac."""
+		key = event.GetKeyCode()
+		mods = event.GetModifiers()
+
+		if key == wx.WXK_RETURN:
+			if mods == wx.MOD_CONTROL | wx.MOD_SHIFT:
+				self.OnStopAudio()
+			elif mods == wx.MOD_CONTROL:
+				self.OnPlayExternal()
+			elif mods == 0:
+				self.OnView()
+			else:
+				event.Skip()
+		elif key == wx.WXK_DELETE or key == wx.WXK_BACK:
+			if mods == 0:
+				self.OnDelete()
+			else:
+				event.Skip()
+		elif key == ord('M') and mods == wx.MOD_ALT:
+			self.OnPostContextMenu()
+		else:
+			event.Skip()
 
 	def OnStats(self, event=None):
 		txt=view.ViewTextGui("You have sent a total of "+str(get_app().prefs.posts_sent)+" posts, of which "+str(get_app().prefs.replies_sent)+" are replies and "+str(get_app().prefs.quotes_sent)+" are quotes.\r\nYou have boosted "+str(get_app().prefs.boosts_sent)+" posts, and favourited "+str(get_app().prefs.favourites_sent)+" posts.\r\nYou have sent "+str(get_app().prefs.chars_sent)+" characters from FastSM!\r\nYou have received "+str(get_app().prefs.statuses_received)+" posts in total through all of your timelines.")

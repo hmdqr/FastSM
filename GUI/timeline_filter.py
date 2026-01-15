@@ -314,7 +314,7 @@ class TimelineFilterDialog(wx.Dialog):
         finally:
             # Always ensure index is valid and dialog closes
             self._ensure_valid_index()
-            self.Destroy()
+            self.EndModal(wx.ID_OK)
 
     def _ensure_valid_index(self):
         """Ensure timeline index is within valid bounds."""
@@ -353,7 +353,7 @@ class TimelineFilterDialog(wx.Dialog):
         finally:
             # Always ensure index is valid and dialog closes
             self._ensure_valid_index()
-            self.Destroy()
+            self.EndModal(wx.ID_CANCEL)
 
 
 def show_filter_dialog(account):
@@ -368,6 +368,7 @@ def show_filter_dialog(account):
     parent = None if platform.system() == "Darwin" else main_window.window
     dlg = TimelineFilterDialog(parent, timeline)
     dlg.ShowModal()
+    dlg.Destroy()
 
 
 def _get_timeline_filter_key(timeline):
